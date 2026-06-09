@@ -2787,6 +2787,136 @@ def build_action_regeneration(output_dir: Path) -> dict[str, object]:
     return regen_report
 
 
+def build_final_candidates(output_dir: Path, selections: dict[str, str]) -> dict[str, object]:
+    report = read_json_file(output_dir / "build_report.json", {})
+    phrase_plan = read_json_file(output_dir / "phrase_plan.json", [])
+    expression_plan = read_json_file(output_dir / "expression_plan.json", [])
+    revised_expression_plan = read_json_file(output_dir / "revised_phrase_variant" / "revised_expression_plan.json", [])
+    action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
+    if not isinstance(report, dict):
+        report = {}
+    if not isinstance(phrase_plan, list):
+        phrase_plan = []
+    if not isinstance(expression_plan, list):
+        expression_plan = []
+    if not isinstance(revised_expression_plan, list):
+        revised_expression_plan = []
+    if not isinstance(action_regeneration, dict):
+        action_regeneration = {}
+
+    product_mode = str(report.get("product_mode", "standard_static"))
+    spec = product_mode_spec(product_mode)
+    static_count = int(spec["static_count"])
+    target_dir = output_dir / "final_candidates"
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    static_dir = target_dir / "static_png_submit"
+    gif_dir = target_dir / "animated_gif_submit"
+    webp_dir = target_dir / "animated_webp_submit"
+    preview_dir = target_dir / "preview_jpg"
+    for directory in [static_dir, gif_dir, webp_dir, preview_dir]:
+        directory.mkdir(parents=True, exist_ok=True)
+
+    regen_by_slot = {
+        int(item.get("slot", 0)): item
+        for item in action_regeneration.get("items", [])
+        if isinstance(item, dict) and str(item.get("slot", "")).isdigit()
+    }
+
+    def clean_choice(value: str) -> str:
+        return value if value in {"original", "revised", "regen"} else "original"
+
+    def candidate_for_slot(slot_number: int, choice: str) -> tuple[Path | None, str, dict[str, object]]:
+        index = slot_number - 1
+        if choice == "regen" and slot_number in regen_by_slot:
+            item = regen_by_slot[slot_number]
+            return output_dir / "action_regeneration" / str(item.get("submit_file", "")), "regen", item
+        if choice == "revised" and index < len(revised_expression_plan) and isinstance(revised_expression_plan[index], dict):
+            item = revised_expression_plan[index]
+            return output_dir / "revised_phrase_variant" / str(item.get("file", "")), "revised", item
+        if index < len(expression_plan) and isinstance(expression_plan[index], dict):
+            item = expression_plan[index]
+            return output_dir / str(item.get("file", "")), "original", item
+        return None, "missing", {}
+
+    selected_items: list[dict[str, object]] = []
+    zip_files: list[Path] = []
+    for index, phrase_slot in enumerate(phrase_plan):
+        if not isinstance(phrase_slot, dict):
+            continue
+        slot_number = index + 1
+        choice = clean_choice(selections.get(str(slot_number), "original"))
+        source_file, source_version, source_meta = candidate_for_slot(slot_number, choice)
+        if (not source_file or not source_file.is_file()) and choice != "original":
+            source_file, source_version, source_meta = candidate_for_slot(slot_number, "original")
+        if not source_file or not source_file.is_file():
+            continue
+        is_static = slot_number <= static_count
+        if is_static:
+            dest = static_dir / f"final_static_{slot_number:02d}{source_file.suffix.lower()}"
+        else:
+            motion_index = slot_number - static_count
+            dest_dir = webp_dir if source_file.suffix.lower() == ".webp" else gif_dir
+            dest = dest_dir / f"final_animated_{motion_index:02d}{source_file.suffix.lower()}"
+        shutil.copy2(source_file, dest)
+        zip_files.append(dest)
+        preview_source = None
+        if source_version == "regen":
+            preview_value = str(source_meta.get("preview_file", ""))
+            preview_source = output_dir / "action_regeneration" / preview_value if preview_value else None
+        elif source_version == "revised":
+            preview_source = output_dir / "revised_phrase_variant" / "preview_jpg" / (
+                f"preview_static_{slot_number:02d}.jpg"
+                if is_static
+                else f"preview_animated_{slot_number - static_count:02d}.jpg"
+            )
+        else:
+            preview_source = output_dir / "preview_jpg" / (
+                f"preview_static_{slot_number:02d}.jpg"
+                if is_static
+                else f"preview_animated_{slot_number - static_count:02d}.jpg"
+            )
+        if preview_source and preview_source.is_file():
+            shutil.copy2(preview_source, preview_dir / f"final_preview_{slot_number:02d}.jpg")
+        selected_items.append(
+            {
+                "slot": slot_number,
+                "choice": source_version,
+                "phrase": source_meta.get("phrase", source_meta.get("regenerated_phrase", phrase_slot.get("phrase", ""))),
+                "file": str(dest.relative_to(target_dir)),
+                "source_file": str(source_file.relative_to(output_dir)),
+            }
+        )
+
+    zip_path = target_dir / "final_candidates_submit.zip"
+    write_zip(zip_path, zip_files, target_dir)
+    validation = validate_output_package(target_dir, product_mode, zip_path)
+    choice_counts = {
+        "original": sum(1 for item in selected_items if item["choice"] == "original"),
+        "revised": sum(1 for item in selected_items if item["choice"] == "revised"),
+        "regen": sum(1 for item in selected_items if item["choice"] == "regen"),
+    }
+    final_report = {
+        "enabled": True,
+        "created_at": time.strftime("%Y%m%d_%H%M%S"),
+        "source_result": output_dir.name,
+        "product_mode": product_mode,
+        "product_label": spec["label"],
+        "item_count": len(selected_items),
+        "choice_counts": choice_counts,
+        "zip": str(zip_path.relative_to(output_dir)),
+        "directory": str(target_dir.relative_to(output_dir)),
+        "validation_status": validation["status"],
+        "validation_fail_count": validation["fail_count"],
+        "validation_warn_count": validation["warn_count"],
+        "items": selected_items,
+        "safe_scope": "최종 후보 묶음은 제출 전 검토용입니다. 실제 제출 전 권리, 직접 수정 기록, 정책 적합성을 사람이 다시 확인해야 합니다.",
+    }
+    write_json_file(target_dir / "final_candidates_report.json", final_report)
+    write_json_file(target_dir / "final_candidates_validation_report.json", validation)
+    return final_report
+
+
 def bytes_label(size: int) -> str:
     units = ["B", "KB", "MB", "GB"]
     value = float(max(size, 0))
@@ -3304,6 +3434,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     animation_quality = read_json_file(output_dir / "animation_quality_report.json", {})
     review_action_plan = read_json_file(output_dir / "review_action_plan.json", {})
     action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
+    final_candidates = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3383,19 +3514,40 @@ def result_detail_page(name: str, message: str = "") -> str:
             for item in regen_items_for_grid
             if isinstance(item, dict) and str(item.get("slot", "")).isdigit()
         }
+        final_items_for_grid = final_candidates.get("items", []) if isinstance(final_candidates, dict) else []
+        final_choice_by_slot = {
+            str(item.get("slot", "")): str(item.get("choice", "original"))
+            for item in final_items_for_grid
+            if isinstance(item, dict)
+        }
         if not original_files and not revised_files and not regen_by_slot:
             return "<p>아직 표시할 미리보기 이미지가 없습니다.</p>"
         cards: list[str] = []
         max_count = max(len(original_files), len(revised_files), max(regen_by_slot.keys(), default=0))
 
-        def preview_cell(label: str, image_path: Path | None, alt: str, phrase_text: str = "", extra_class: str = "") -> str:
+        def preview_cell(
+            label: str,
+            image_path: Path | None,
+            alt: str,
+            phrase_text: str = "",
+            extra_class: str = "",
+            slot_number: int = 0,
+            choice_value: str = "original",
+            enabled: bool = True,
+            checked: bool = False,
+        ) -> str:
             image_html = (
                 f"<a href='{html.escape(file_href(image_path))}'><img src='{html.escape(file_href(image_path))}' alt='{html.escape(alt)}'></a>"
                 if image_path and image_path.exists()
                 else f"<div class='missing-preview'>{html.escape(label)} 없음</div>"
             )
             phrase_html = f"<small>{html.escape(phrase_text)}</small>" if phrase_text else ""
-            return f"<div class='{html.escape(extra_class)}'><span>{html.escape(label)}</span>{image_html}{phrase_html}</div>"
+            radio = (
+                f"<label class='candidate-radio'><input type='radio' name='candidate_{slot_number}' value='{html.escape(choice_value)}' {'checked' if checked else ''}> 최종 후보</label>"
+                if enabled
+                else "<label class='candidate-radio disabled'>선택 불가</label>"
+            )
+            return f"<div class='{html.escape(extra_class)}'><span>{html.escape(label)}</span>{image_html}{phrase_html}{radio}</div>"
 
         for index in range(max_count):
             phrase_slot = phrase_plan[index] if index < len(phrase_plan) and isinstance(phrase_plan[index], dict) else {}
@@ -3413,14 +3565,15 @@ def result_detail_page(name: str, message: str = "") -> str:
             regen_phrase = str(regen_item.get("regenerated_phrase", "")) if regen_item else ""
             regen_badge = "<span class='regen-badge'>재생성 후보</span>" if regen_item else "<span class='same-badge'>원본 흐름</span>"
             cell_class = "thumb-triple has-regen" if regen_item else "thumb-triple"
+            current_choice = final_choice_by_slot.get(str(index + 1), "original")
             cards.append(
                 f"""
                 <div class="review-card {'regen-card' if regen_item else ''}">
                   <div class="review-title"><strong>#{index + 1:02d}</strong><span>{html.escape(emotion_label or "감정 미확인")} {regen_badge}</span></div>
                   <div class="{cell_class}">
-                    {preview_cell("원본", original, f"원본 {index + 1}", phrase)}
-                    {preview_cell("문구 수정본", revised_preview, f"수정본 {index + 1}", "", "")}
-                    {preview_cell("재생성본", regen_preview, f"재생성본 {index + 1}", regen_phrase, "regen-cell")}
+                    {preview_cell("원본", original, f"원본 {index + 1}", phrase, "", index + 1, "original", bool(original), current_choice == "original")}
+                    {preview_cell("문구 수정본", revised_preview, f"수정본 {index + 1}", "", "", index + 1, "revised", bool(revised_preview and revised_preview.exists()), current_choice == "revised")}
+                    {preview_cell("재생성본", regen_preview, f"재생성본 {index + 1}", regen_phrase, "regen-cell", index + 1, "regen", bool(regen_preview and regen_preview.exists()), current_choice == "regen")}
                   </div>
                   <p class="review-phrase">{html.escape(regen_phrase or phrase or "문구 없음")}</p>
                   <p class="review-meta">출처 {html.escape(source or "-")} · 원본/수정본/재생성본 비교 · 최종 후보는 사람 검토 후 선택</p>
@@ -3593,6 +3746,25 @@ def result_detail_page(name: str, message: str = "") -> str:
         if isinstance(action_regeneration, dict) and action_regeneration
         else "재생성 결과 없음"
     )
+    final_items = final_candidates.get("items", []) if isinstance(final_candidates, dict) else []
+    final_choice_counts = final_candidates.get("choice_counts", {}) if isinstance(final_candidates, dict) else {}
+    if not isinstance(final_choice_counts, dict):
+        final_choice_counts = {}
+    final_html = html_list(
+        [
+            f"#{item.get('slot', '')} {item.get('choice', '')}: {item.get('phrase', '')}"
+            for item in final_items[:10]
+            if isinstance(item, dict)
+        ],
+        "아직 최종 후보 묶음이 없습니다.",
+    )
+    final_summary = (
+        f"최근 저장 {html.escape(str(final_candidates.get('created_at', '')))} / "
+        f"{html.escape(str(final_candidates.get('item_count', 0)))}개 컷 / "
+        f"검증 {html.escape(str(final_candidates.get('validation_status', '')))}"
+        if isinstance(final_candidates, dict) and final_candidates
+        else "최종 후보 묶음 없음"
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3631,6 +3803,7 @@ def result_detail_page(name: str, message: str = "") -> str:
             link("WebP 품질 리포트", output_dir / "animation_quality_report.json"),
             link("검토 액션 플랜", output_dir / "review_action_plan.json") if (output_dir / "review_action_plan.json").exists() else "",
             link("수정 재생성 ZIP", output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip") if (output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip").exists() else "",
+            link("최종 후보 ZIP", output_dir / "final_candidates" / "final_candidates_submit.zip") if (output_dir / "final_candidates" / "final_candidates_submit.zip").exists() else "",
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -3710,6 +3883,9 @@ def result_detail_page(name: str, message: str = "") -> str:
     .thumb-triple small {{ margin-top:6px; color:#2d2424; font-weight:800; line-height:1.35; overflow-wrap:anywhere; }}
     .thumb-triple img {{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:14px; background:#fff; border:1px solid #ead8bc; box-shadow:0 8px 18px rgba(96,69,45,.08); }}
     .thumb-triple .regen-cell img {{ border-color:#7fd8be; box-shadow:0 8px 20px rgba(52,126,101,.15); }}
+    .candidate-radio {{ margin-top:7px; display:flex; align-items:center; gap:6px; color:#2d2424; font-size:12px; font-weight:900; }}
+    .candidate-radio input {{ margin:0; }}
+    .candidate-radio.disabled {{ color:#a49a92; }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
     .thumb-pair img {{ width:100%; border-radius:14px; background:#fff; border:1px solid #ead8bc; box-shadow:0 8px 18px rgba(96,69,45,.08); }}
@@ -3835,9 +4011,21 @@ def result_detail_page(name: str, message: str = "") -> str:
   <section class="panel">
     <h2>스토어형 빠른 검토 그리드</h2>
     <p>대표 컷이 아니라 전체 흐름을 빠르게 훑어보는 검토용 화면입니다. 구조만 참고하며, 캐릭터와 표현은 독자 스타일로 유지합니다.</p>
-    <div class="thumb-grid">
-      {review_grid_cards_html}
-    </div>
+    <form class="action-form" method="post" action="/final-candidates">
+      <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+      <div class="thumb-grid">
+        {review_grid_cards_html}
+      </div>
+      <div class="button-row">
+        <button class="action-button" type="submit">선택한 버전으로 최종 후보 ZIP 만들기</button>
+      </div>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>최종 후보 묶음</h2>
+    <p>{final_summary}</p>
+    <p>원본 {html.escape(str(final_choice_counts.get("original", 0)))} / 문구 수정본 {html.escape(str(final_choice_counts.get("revised", 0)))} / 재생성본 {html.escape(str(final_choice_counts.get("regen", 0)))}</p>
+    {final_html}
   </section>
   <section class="panel">
     <h2>비슷한 스타일 / 다음 생성 방향</h2>
@@ -5409,6 +5597,8 @@ def build_creator_evidence_package(
         output_dir / "weak_cut_review.json",
         output_dir / "review_action_plan.json",
         output_dir / "action_regeneration" / "action_regeneration_report.json",
+        output_dir / "final_candidates" / "final_candidates_report.json",
+        output_dir / "final_candidates" / "final_candidates_validation_report.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
@@ -6823,6 +7013,28 @@ class Handler(BaseHTTPRequestHandler):
                 result_detail_page(
                     output_dir.name,
                     f"수정 플랜 기준으로 {regen.get('item_count', 0)}개 컷을 action_regeneration 폴더에 재생성했습니다.",
+                ),
+            )
+            return
+        if self.path == "/final-candidates":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            output_dir = safe_output_dir_by_name(form_value(form, "name", ""))
+            if output_dir is None:
+                self.respond(404, page(error="결과 폴더를 찾을 수 없습니다."))
+                return
+            selections = {
+                key.replace("candidate_", "", 1): values[0]
+                for key, values in form.items()
+                if key.startswith("candidate_") and values
+            }
+            final_report = build_final_candidates(output_dir, selections)
+            self.respond(
+                200,
+                result_detail_page(
+                    output_dir.name,
+                    f"최종 후보 {final_report.get('item_count', 0)}개를 final_candidates_submit.zip으로 묶었습니다.",
                 ),
             )
             return
