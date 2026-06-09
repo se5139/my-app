@@ -4352,6 +4352,53 @@ def write_zip(zip_path: Path, files: Iterable[Path], root: Path) -> None:
             archive.write(file_path, file_path.relative_to(root))
 
 
+WINDOWS_RESERVED_FILENAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+}
+
+
+def validate_zip_entry_name(entry: str) -> list[str]:
+    problems: list[str] = []
+    normalized = entry.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part]
+    if entry.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", entry):
+        problems.append("absolute path")
+    if "\\" in entry:
+        problems.append("backslash separator")
+    if not parts:
+        problems.append("empty path")
+    if any(part == ".." for part in normalized.split("/")):
+        problems.append("parent directory traversal")
+    for part in parts:
+        stem = part.split(".", 1)[0].upper()
+        if stem in WINDOWS_RESERVED_FILENAMES:
+            problems.append(f"reserved Windows name: {part}")
+        if part not in {".", ".."} and part.endswith((" ", ".")):
+            problems.append(f"unsafe trailing character: {part}")
+    return problems
+
+
 def validate_image_file(path: Path, expected_format: str) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     try:
@@ -4464,6 +4511,41 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
     else:
         with zipfile.ZipFile(zip_path) as archive:
             zip_entries = archive.namelist()
+            corrupt_entry = archive.testzip()
+        if corrupt_entry:
+            issues.append(
+                {
+                    "level": "fail",
+                    "file": str(zip_path),
+                    "message": f"Submit ZIP integrity check failed at entry: {corrupt_entry}.",
+                }
+            )
+        duplicate_entries = sorted({entry for entry in zip_entries if zip_entries.count(entry) > 1})
+        if duplicate_entries:
+            issues.append(
+                {
+                    "level": "fail",
+                    "file": str(zip_path),
+                    "message": f"Submit ZIP contains duplicate internal paths: {len(duplicate_entries)}.",
+                }
+            )
+        unsafe_entries = {
+            entry: validate_zip_entry_name(entry)
+            for entry in zip_entries
+            if not entry.endswith("/") and validate_zip_entry_name(entry)
+        }
+        if unsafe_entries:
+            sample_entry, sample_reasons = next(iter(unsafe_entries.items()))
+            issues.append(
+                {
+                    "level": "fail",
+                    "file": str(zip_path),
+                    "message": (
+                        f"Submit ZIP contains unsafe internal paths: {len(unsafe_entries)} "
+                        f"(example: {sample_entry}; {', '.join(sample_reasons)})."
+                    ),
+                }
+            )
         jpg_entries = [entry for entry in zip_entries if entry.lower().endswith((".jpg", ".jpeg"))]
         png_entries = [entry for entry in zip_entries if entry.lower().endswith(".png")]
         gif_entries = [entry for entry in zip_entries if entry.lower().endswith(".gif")]
