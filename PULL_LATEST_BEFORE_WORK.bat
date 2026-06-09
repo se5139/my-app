@@ -22,6 +22,25 @@ if errorlevel 1 (
   )
 )
 
+set "GIT_AUTH_ARGS="
+where gh >nul 2>nul
+if not errorlevel 1 (
+  gh auth status >nul 2>nul
+  if not errorlevel 1 (
+    set "ASKPASS=%TEMP%\kakao_git_askpass_gh.cmd"
+    > "!ASKPASS!" echo @echo off
+    >> "!ASKPASS!" echo echo %%~1 ^| findstr /I "Username" ^>nul
+    >> "!ASKPASS!" echo if not errorlevel 1 ^(
+    >> "!ASKPASS!" echo   echo x-access-token
+    >> "!ASKPASS!" echo   exit /b 0
+    >> "!ASKPASS!" echo ^)
+    >> "!ASKPASS!" echo gh auth token
+    set "GIT_TERMINAL_PROMPT=0"
+    set "GIT_ASKPASS=!ASKPASS!"
+    set "GIT_AUTH_ARGS=-c credential.helper= -c core.askPass=!ASKPASS!"
+  )
+)
+
 "%GIT_CMD%" rev-parse --is-inside-work-tree >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] This folder is not a Git repository.
@@ -40,7 +59,7 @@ for /f "delims=" %%S in ('"%GIT_CMD%" status --porcelain') do (
 )
 
 echo [INFO] Local folder is clean. Pulling latest main branch...
-"%GIT_CMD%" pull --ff-only origin main
+"%GIT_CMD%" %GIT_AUTH_ARGS% pull --ff-only origin main
 if errorlevel 1 (
   echo.
   echo [ERROR] Pull failed. Check the message above.
