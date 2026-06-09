@@ -3016,6 +3016,126 @@ def build_final_candidate_audit(output_dir: Path) -> dict[str, object]:
     return audit
 
 
+def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
+    report = read_json_file(output_dir / "build_report.json", {})
+    final_report = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
+    final_audit = read_json_file(output_dir / "final_candidates" / "final_candidates_audit_report.json", {})
+    readiness = read_json_file(output_dir / "submission_readiness_report.json", {})
+    if not isinstance(report, dict):
+        report = {}
+    if not isinstance(final_report, dict):
+        final_report = {}
+    if not isinstance(final_audit, dict):
+        final_audit = {}
+    if not isinstance(readiness, dict):
+        readiness = {}
+
+    final_zip = output_dir / "final_candidates" / "final_candidates_submit.zip"
+    evidence_zip = output_dir / "creator_evidence_package.zip"
+    if not final_zip.exists():
+        raise ValueError("먼저 최종 후보 ZIP을 만들어야 합니다.")
+
+    package_dir = output_dir / "pre_submission_package"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "enabled": True,
+        "created_at": time.strftime("%Y%m%d_%H%M%S"),
+        "source_result": output_dir.name,
+        "character_name": report.get("character_name", ""),
+        "product_label": report.get("product_label", final_report.get("product_label", "")),
+        "final_candidate_zip": str(final_zip.relative_to(output_dir)),
+        "evidence_zip": str(evidence_zip.relative_to(output_dir)) if evidence_zip.exists() else "",
+        "final_audit_status": final_audit.get("status", ""),
+        "validation_status": final_report.get("validation_status", ""),
+        "submission_readiness": readiness.get("decision_label", ""),
+        "included_files": [],
+        "manual_required": [
+            "카카오 이모티콘 스튜디오 최신 규격을 다시 확인하세요.",
+            "최종 후보 그림, 문구, 움직임을 사람이 직접 검수하세요.",
+            "러프/레이어 원본/수정 이력/권리 메모 등 직접 제작 증빙을 별도로 확인하세요.",
+            "참고 자료의 캐릭터, 문구, 구도, 그림체를 복제하지 않았는지 확인하세요.",
+        ],
+        "safe_scope": "이 묶음은 제출 전 검토용 패키지이며 심사 통과나 제출 가능성을 보장하지 않습니다.",
+    }
+    include_files = [
+        final_zip,
+        evidence_zip,
+        output_dir / "build_report.json",
+        output_dir / "submission_readiness_report.json",
+        output_dir / "validation_report.json",
+        output_dir / "phrase_quality_report.json",
+        output_dir / "animation_quality_report.json",
+        output_dir / "weak_cut_review.json",
+        output_dir / "review_action_plan.json",
+        output_dir / "action_regeneration" / "action_regeneration_report.json",
+        output_dir / "final_candidates" / "final_candidates_report.json",
+        output_dir / "final_candidates" / "final_candidates_validation_report.json",
+        output_dir / "final_candidates" / "final_candidates_audit_report.json",
+    ]
+    existing_files = [path for path in include_files if path.exists()]
+    manifest["included_files"] = [str(path.relative_to(output_dir)) for path in existing_files]
+    package_zip = package_dir / "pre_submission_review_package.zip"
+    manifest["zip"] = str(package_zip.relative_to(output_dir))
+    manifest["html"] = str((package_dir / "pre_submission_summary.html").relative_to(output_dir))
+    manifest["file_count"] = len(existing_files) + 2
+
+    checklist_html = html_list(manifest["manual_required"], "수동 확인 항목이 없습니다.")
+    summary_html = f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pre Submission Package</title>
+  <style>
+    body {{ margin:0; font-family:"Malgun Gothic", sans-serif; color:#2d2424; background:#fff8ea; }}
+    main {{ width:min(920px, calc(100% - 32px)); margin:0 auto; padding:34px 0; }}
+    section {{ margin-bottom:16px; padding:22px; background:#fff; border:2px solid #ead8bc; border-radius:22px; }}
+    h1 {{ margin:0 0 8px; font-size:34px; }}
+    p, li {{ color:#6f625f; line-height:1.65; }}
+    .pill {{ display:inline-block; margin:4px 6px 4px 0; padding:8px 11px; border-radius:999px; background:#e9fff4; border:1px solid #9be2c7; font-weight:900; }}
+    code {{ background:#fff3d8; padding:2px 6px; border-radius:8px; }}
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>제출 전 패키지</h1>
+    <p><strong>캐릭터</strong>: {html.escape(str(manifest.get("character_name", "")))}</p>
+    <p><strong>상품</strong>: {html.escape(str(manifest.get("product_label", "")))}</p>
+    <p><span class="pill">최종 검수 {html.escape(str(manifest.get("final_audit_status", "")))}</span><span class="pill">ZIP 검증 {html.escape(str(manifest.get("validation_status", "")))}</span><span class="pill">제출 준비 {html.escape(str(manifest.get("submission_readiness", "")))}</span></p>
+    <p>이 패키지는 제출 전 점검용입니다. 실제 제출 전에는 사람이 최종 파일과 증빙을 다시 확인해야 합니다.</p>
+  </section>
+  <section>
+    <h2>동봉 파일</h2>
+    {html_list(manifest["included_files"], "동봉 파일이 없습니다.")}
+  </section>
+  <section>
+    <h2>수동 확인 항목</h2>
+    {checklist_html}
+  </section>
+  <section>
+    <h2>주요 파일</h2>
+    <ul>
+      <li><code>final_candidates_submit.zip</code>: 최종 후보 이미지 묶음</li>
+      <li><code>creator_evidence_package.zip</code>: 제작 증빙 묶음</li>
+      <li><code>final_candidates_audit_report.json</code>: 최종 후보 파일별 검수</li>
+      <li><code>pre_submission_manifest.json</code>: 이 패키지 인덱스</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>"""
+    (package_dir / "pre_submission_summary.html").write_text(summary_html, encoding="utf-8")
+    write_json_file(package_dir / "pre_submission_manifest.json", manifest)
+
+    with zipfile.ZipFile(package_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.write(package_dir / "pre_submission_manifest.json", "pre_submission_manifest.json")
+        archive.write(package_dir / "pre_submission_summary.html", "pre_submission_summary.html")
+        for file_path in existing_files:
+            archive.write(file_path, file_path.relative_to(output_dir))
+    return manifest
+
+
 def bytes_label(size: int) -> str:
     units = ["B", "KB", "MB", "GB"]
     value = float(max(size, 0))
@@ -3535,6 +3655,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
     final_candidates = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
     final_audit = read_json_file(output_dir / "final_candidates" / "final_candidates_audit_report.json", {})
+    pre_submission = read_json_file(output_dir / "pre_submission_package" / "pre_submission_manifest.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3899,6 +4020,18 @@ def result_detail_page(name: str, message: str = "") -> str:
         if isinstance(final_audit, dict) and final_audit
         else "<p>최종 후보 ZIP을 만들면 파일별 상세 검수표가 표시됩니다.</p>"
     )
+    pre_submission_files = pre_submission.get("included_files", []) if isinstance(pre_submission, dict) else []
+    pre_submission_summary = (
+        f"최근 생성 {html.escape(str(pre_submission.get('created_at', '')))} / "
+        f"동봉 {html.escape(str(pre_submission.get('file_count', 0)))}개 / "
+        f"최종 검수 {html.escape(str(pre_submission.get('final_audit_status', '')))}"
+        if isinstance(pre_submission, dict) and pre_submission
+        else "제출 전 패키지 없음"
+    )
+    pre_submission_html = html_list(
+        [str(item) for item in pre_submission_files[:12]],
+        "아직 제출 전 패키지에 포함된 파일 목록이 없습니다.",
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3939,6 +4072,7 @@ def result_detail_page(name: str, message: str = "") -> str:
             link("수정 재생성 ZIP", output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip") if (output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip").exists() else "",
             link("최종 후보 ZIP", output_dir / "final_candidates" / "final_candidates_submit.zip") if (output_dir / "final_candidates" / "final_candidates_submit.zip").exists() else "",
             link("최종 후보 검수 리포트", output_dir / "final_candidates" / "final_candidates_audit_report.json") if (output_dir / "final_candidates" / "final_candidates_audit_report.json").exists() else "",
+            link("제출 전 패키지 ZIP", output_dir / "pre_submission_package" / "pre_submission_review_package.zip") if (output_dir / "pre_submission_package" / "pre_submission_review_package.zip").exists() else "",
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -4172,6 +4306,18 @@ def result_detail_page(name: str, message: str = "") -> str:
     <h2>최종 후보 ZIP 상세 검수</h2>
     <p>최종 후보 폴더와 ZIP을 다시 읽어 파일명, 선택 출처, 형식, 크기, 용량, 프레임 수를 확인합니다.</p>
     {final_audit_html}
+  </section>
+  <section class="panel">
+    <h2>제출 전 패키지</h2>
+    <p>{pre_submission_summary}</p>
+    <p>최종 후보 ZIP, 제작 증빙 ZIP, 주요 검수 리포트를 한 번에 묶습니다. 실제 제출 전에는 사람이 최종 파일과 권리 증빙을 다시 확인해야 합니다.</p>
+    {pre_submission_html}
+    <form class="action-form" method="post" action="/pre-submission-package">
+      <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+      <div class="button-row">
+        <button class="action-button" type="submit">제출 전 패키지 ZIP 만들기</button>
+      </div>
+    </form>
   </section>
   <section class="panel">
     <h2>비슷한 스타일 / 다음 생성 방향</h2>
@@ -7182,6 +7328,23 @@ class Handler(BaseHTTPRequestHandler):
                 result_detail_page(
                     output_dir.name,
                     f"최종 후보 {final_report.get('item_count', 0)}개를 final_candidates_submit.zip으로 묶었습니다.",
+                ),
+            )
+            return
+        if self.path == "/pre-submission-package":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            output_dir = safe_output_dir_by_name(form_value(form, "name", ""))
+            if output_dir is None:
+                self.respond(404, page(error="결과 폴더를 찾을 수 없습니다."))
+                return
+            package = build_pre_submission_package(output_dir)
+            self.respond(
+                200,
+                result_detail_page(
+                    output_dir.name,
+                    f"제출 전 패키지 {package.get('file_count', 0)}개 파일을 pre_submission_review_package.zip으로 묶었습니다.",
                 ),
             )
             return
