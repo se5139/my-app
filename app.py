@@ -4156,41 +4156,85 @@ def result_detail_page(name: str, message: str = "") -> str:
         f"<span class='stage {'done' if enabled else 'todo'}'>{html.escape(label)}</span>"
         for label, enabled in detail_stage_labels
     )
+    weak_preview_items = [
+        f"#{item.get('slot', '')} {item.get('phrase', '')} ({', '.join(str(flag) for flag in item.get('flags', [])[:2])})"
+        for item in weak_cut_items[:5]
+        if isinstance(item, dict)
+    ]
+    review_preview_items = [
+        f"#{item.get('slot', '')} {item.get('phrase', '')}"
+        for item in review_action_items[:5]
+        if isinstance(item, dict)
+    ]
+    regen_preview_items = [
+        f"#{item.get('slot', '')} {item.get('original_phrase', '')} -> {item.get('regenerated_phrase', '')}"
+        for item in regen_items[:5]
+        if isinstance(item, dict)
+    ]
+    final_preview_items = [
+        f"#{item.get('slot', '')} {item.get('choice', '')}: {item.get('phrase', '')}"
+        for item in final_items[:5]
+        if isinstance(item, dict)
+    ]
     if not (isinstance(review_action_plan, dict) and review_action_plan):
         next_step_title = "수정 계획 만들기"
         next_step_note = "약한 컷을 자동으로 골라 수정 액션 플랜을 먼저 저장합니다."
+        next_step_preview = html_list(
+            weak_preview_items,
+            "자동으로 우선 선택할 약한 컷이 없습니다. 버튼을 누르면 빈 수정 계획이 저장될 수 있습니다.",
+        )
         next_step_control = f"""
         <form method="post" action="/review-action">
           <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
           <input type="hidden" name="focus" value="weak">
-          <button class="action-button" type="submit">수정 계획 자동 저장</button>
+          <button class="action-button" type="submit">확인 후 수정 계획 저장</button>
         </form>
         """
     elif not (isinstance(action_regeneration, dict) and action_regeneration):
         next_step_title = "수정 재생성하기"
         next_step_note = "저장된 수정 액션 플랜으로 선택 컷을 다시 생성합니다."
+        next_step_preview = html_list(
+            review_preview_items,
+            "저장된 수정 액션 항목이 없습니다. 먼저 수정 계획을 확인하세요.",
+        )
         next_step_control = f"""
         <form method="post" action="/regenerate-action">
           <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
-          <button class="action-button" type="submit">수정 플랜으로 재생성</button>
+          <button class="action-button" type="submit">확인 후 수정 플랜으로 재생성</button>
         </form>
         """
     elif not (isinstance(final_candidates, dict) and final_candidates):
         next_step_title = "최종 후보 ZIP 만들기"
         next_step_note = "3단 비교 그리드에서 원본, 수정본, 재생성본 중 후보를 고르세요."
+        next_step_preview = html_list(
+            regen_preview_items,
+            "재생성본이 없으면 원본과 문구 수정본 중심으로 최종 후보를 선택합니다.",
+        )
         next_step_control = "<a class='action-button' href='#final-select'>최종 후보 선택으로 이동</a>"
     elif not (isinstance(pre_submission, dict) and pre_submission):
         next_step_title = "제출 전 패키지 만들기"
         next_step_note = "최종 후보 ZIP, 증빙 ZIP, 검수 리포트를 한 번에 묶습니다."
+        next_step_preview = html_list(
+            final_preview_items,
+            "최종 후보 항목이 없습니다. 먼저 최종 후보 ZIP을 만드세요.",
+        )
         next_step_control = f"""
         <form method="post" action="/pre-submission-package">
           <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
-          <button class="action-button" type="submit">제출 전 패키지 만들기</button>
+          <button class="action-button" type="submit">확인 후 제출 전 패키지 만들기</button>
         </form>
         """
     else:
         next_step_title = "완료 상태 확인"
         next_step_note = "제출 전 패키지까지 준비됐습니다. 실제 제출 전 사람 검토와 권리 증빙을 다시 확인하세요."
+        next_step_preview = html_list(
+            [
+                f"제출 전 패키지: {pre_submission.get('file_count', 0)}개 파일",
+                f"최종 검수: {pre_submission.get('final_audit_status', '')}",
+                f"상품: {pre_submission.get('product_label', '')}",
+            ],
+            "제출 전 패키지 요약이 없습니다.",
+        )
         next_step_control = (
             f"<a class='action-button' href='{html.escape(file_href(output_dir / 'pre_submission_package' / 'pre_submission_review_package.zip'))}'>제출 전 패키지 ZIP 열기</a>"
             if (output_dir / "pre_submission_package" / "pre_submission_review_package.zip").exists()
@@ -4317,6 +4361,9 @@ def result_detail_page(name: str, message: str = "") -> str:
     .stage.done {{ background:#dff8eb; color:#245d46; border-color:#83d7b6; }}
     .stage.todo {{ background:#f0ece5; color:#8a7b70; border-color:#d8ccbc; }}
     .next-step-box {{ background:#fff; border:1px solid #9be2c7; border-radius:18px; padding:14px; }}
+    .next-step-preview {{ margin:10px 0; padding:10px 12px; border-radius:14px; background:#fffaf0; border:1px solid #ead8bc; }}
+    .next-step-preview ul {{ margin:6px 0 0; padding-left:18px; }}
+    .next-step-preview li {{ font-size:13px; }}
     .audit-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:12px 0; }}
     .table-wrap {{ width:100%; overflow-x:auto; }}
     .audit-table {{ width:100%; border-collapse:separate; border-spacing:0; min-width:760px; }}
@@ -4384,6 +4431,10 @@ def result_detail_page(name: str, message: str = "") -> str:
     <div class="next-step-box">
       <h2>{html.escape(next_step_title)}</h2>
       <p>{html.escape(next_step_note)}</p>
+      <div class="next-step-preview">
+        <strong>실행 전 확인</strong>
+        {next_step_preview}
+      </div>
       {next_step_control}
     </div>
   </section>
