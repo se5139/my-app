@@ -2495,6 +2495,34 @@ def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
         revised = report.get("revised_phrase_variant", {}) if isinstance(report.get("revised_phrase_variant", {}), dict) else {}
         readiness = report.get("submission_readiness", {}) if isinstance(report.get("submission_readiness", {}), dict) else {}
         phrase_quality = report.get("phrase_quality", {}) if isinstance(report.get("phrase_quality", {}), dict) else {}
+        stage_files = {
+            "generated": report_path,
+            "review_action": output_dir / "review_action_plan.json",
+            "regenerated": output_dir / "action_regeneration" / "action_regeneration_report.json",
+            "final_candidates": output_dir / "final_candidates" / "final_candidates_report.json",
+            "final_audit": output_dir / "final_candidates" / "final_candidates_audit_report.json",
+            "pre_submission": output_dir / "pre_submission_package" / "pre_submission_manifest.json",
+        }
+        stages = {key: path.exists() for key, path in stage_files.items()}
+        stage_labels = [
+            ("생성", stages["generated"]),
+            ("수정계획", stages["review_action"]),
+            ("재생성", stages["regenerated"]),
+            ("최종후보", stages["final_candidates"]),
+            ("상세검수", stages["final_audit"]),
+            ("제출전팩", stages["pre_submission"]),
+        ]
+        completed_stage_count = sum(1 for _, enabled in stage_labels if enabled)
+        progress_percent = round(completed_stage_count / len(stage_labels) * 100)
+        final_candidates = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
+        final_audit = read_json_file(output_dir / "final_candidates" / "final_candidates_audit_report.json", {})
+        pre_submission = read_json_file(output_dir / "pre_submission_package" / "pre_submission_manifest.json", {})
+        if not isinstance(final_candidates, dict):
+            final_candidates = {}
+        if not isinstance(final_audit, dict):
+            final_audit = {}
+        if not isinstance(pre_submission, dict):
+            pre_submission = {}
         rows.append(
             {
                 "folder": str(output_dir),
@@ -2513,6 +2541,19 @@ def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
                 "revised_zip": revised.get("zip", ""),
                 "evidence_zip": evidence.get("zip", ""),
                 "build_report": str(report_path),
+                "stage_labels": stage_labels,
+                "completed_stage_count": completed_stage_count,
+                "total_stage_count": len(stage_labels),
+                "progress_percent": progress_percent,
+                "final_status": final_candidates.get("validation_status", ""),
+                "audit_status": final_audit.get("status", ""),
+                "pre_submission_status": "ready" if stages["pre_submission"] else "",
+                "final_zip": str(output_dir / "final_candidates" / "final_candidates_submit.zip")
+                if (output_dir / "final_candidates" / "final_candidates_submit.zip").exists()
+                else "",
+                "pre_submission_zip": str(output_dir / "pre_submission_package" / "pre_submission_review_package.zip")
+                if (output_dir / "pre_submission_package" / "pre_submission_review_package.zip").exists()
+                else "",
             }
         )
         if len(rows) >= limit:
@@ -3568,6 +3609,10 @@ def release_check_page() -> str:
 
 def results_page() -> str:
     rows = load_recent_results()
+    total_rows = len(rows)
+    pre_submission_count = sum(1 for row in rows if row.get("pre_submission_status"))
+    final_count = sum(1 for row in rows if row.get("final_zip"))
+    regen_count = sum(1 for row in rows if any(label == "재생성" and enabled for label, enabled in row.get("stage_labels", [])))
     row_html = ""
     for row in rows:
         links = []
@@ -3577,6 +3622,8 @@ def results_page() -> str:
             ("원본 ZIP", "zip"),
             ("수정판 ZIP", "revised_zip"),
             ("증빙 ZIP", "evidence_zip"),
+            ("최종 ZIP", "final_zip"),
+            ("제출전 ZIP", "pre_submission_zip"),
             ("리포트", "build_report"),
         ]:
             value = str(row.get(key, ""))
@@ -3585,19 +3632,38 @@ def results_page() -> str:
             if value:
                 href = value if value.startswith("/") else "/" + value.replace("\\", "/")
                 links.append(f"<a href='{html.escape(href)}'>{label}</a>")
+        stage_badges = "".join(
+            f"<span class='stage {'done' if enabled else 'todo'}'>{html.escape(label)}</span>"
+            for label, enabled in row.get("stage_labels", [])
+        )
+        progress = int(row.get("progress_percent", 0) or 0)
+        final_line = " / ".join(
+            item
+            for item in [
+                f"최종 {row.get('final_status')}" if row.get("final_status") else "",
+                f"검수 {row.get('audit_status')}" if row.get("audit_status") else "",
+                "제출전팩 ready" if row.get("pre_submission_status") else "",
+            ]
+            if item
+        ) or "다음 단계 대기"
         row_html += f"""
         <tr>
           <td>{html.escape(str(row.get("mtime", "")))}</td>
           <td><strong>{html.escape(str(row.get("character_name", "")))}</strong><br><small>{html.escape(str(row.get("name", "")))}</small></td>
           <td>{html.escape(str(row.get("product_label", "")))}</td>
-          <td>{html.escape(str(row.get("validation_status", "")))}</td>
+          <td>
+            <div class="progress"><span style="width:{progress}%"></span></div>
+            <strong>{html.escape(str(row.get("completed_stage_count", 0)))}/{html.escape(str(row.get("total_stage_count", 0)))}</strong>
+            <div class="stages">{stage_badges}</div>
+          </td>
+          <td>{html.escape(str(row.get("validation_status", "")))}<br><small>{html.escape(final_line)}</small></td>
           <td>{html.escape(str(row.get("readiness_score", "")))} / {html.escape(str(row.get("readiness_label", "")))}</td>
           <td>{html.escape(str(row.get("phrase_quality_status", "")))} / {html.escape(str(row.get("phrase_quality_score", "")))}</td>
           <td>{" ".join(links)}</td>
         </tr>
         """
     if not row_html:
-        row_html = "<tr><td colspan='7'>아직 생성 결과가 없습니다.</td></tr>"
+        row_html = "<tr><td colspan='8'>아직 생성 결과가 없습니다.</td></tr>"
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -3610,25 +3676,40 @@ def results_page() -> str:
     .panel {{ border:2px solid #ead8bc; border-radius:28px; background:rgba(255,255,255,.86); padding:24px; box-shadow:0 18px 50px rgba(96,69,45,.11); margin-bottom:18px; }}
     h1 {{ margin:0 0 10px; font-size:clamp(32px,5vw,54px); letter-spacing:-.05em; }}
     p, td, th, small {{ line-height:1.6; color:#6f625f; }}
+    .summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:14px; }}
+    .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
+    .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
     table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
     th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
     th {{ color:#2d2424; background:#fff3d8; }}
+    .progress {{ width:120px; max-width:100%; height:9px; border-radius:999px; overflow:hidden; background:#f0ece5; border:1px solid #d8ccbc; margin-bottom:6px; }}
+    .progress span {{ display:block; height:100%; background:#7fd8be; }}
+    .stages {{ display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; max-width:250px; }}
+    .stage {{ display:inline-block; border-radius:999px; padding:3px 7px; font-size:11px; font-weight:900; border:1px solid transparent; }}
+    .stage.done {{ background:#dff8eb; color:#245d46; border-color:#83d7b6; }}
+    .stage.todo {{ background:#f0ece5; color:#8a7b70; border-color:#d8ccbc; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
-    @media (max-width: 860px) {{ table {{ font-size:13px; }} th:nth-child(3), td:nth-child(3) {{ display:none; }} }}
+    @media (max-width: 860px) {{ table {{ font-size:13px; }} th:nth-child(3), td:nth-child(3) {{ display:none; }} .progress {{ width:90px; }} }}
   </style>
 </head>
 <body>
 <main>
   <section class="panel">
     <h1>최근 결과물</h1>
-    <p>최근 생성한 결과 폴더와 갤러리, ZIP, 리포트를 바로 확인합니다.</p>
+    <p>최근 생성한 결과 폴더의 진행 상태와 갤러리, ZIP, 리포트를 바로 확인합니다.</p>
     <p><a class="nav" href="/">제작 화면</a><a class="nav" href="/memory">진화 메모리</a><a class="nav" href="/status">실행 상태</a><a class="nav" href="/release-check">배포 점검</a></p>
+    <div class="summary">
+      <div class="metric"><span>최근 결과</span><strong>{total_rows}</strong></div>
+      <div class="metric"><span>최종 후보 ZIP</span><strong>{final_count}</strong></div>
+      <div class="metric"><span>제출 전 패키지</span><strong>{pre_submission_count}</strong></div>
+      <div class="metric"><span>재생성 진행</span><strong>{regen_count}</strong></div>
+    </div>
   </section>
   <section class="panel">
     <table>
       <thead>
-        <tr><th>시간</th><th>캐릭터</th><th>상품</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>바로가기</th></tr>
+        <tr><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>바로가기</th></tr>
       </thead>
       <tbody>{row_html}</tbody>
     </table>
