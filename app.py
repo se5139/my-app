@@ -41,10 +41,10 @@ RELEASE_ROOT = Path("release")
 MEMORY_ROOT = Path("memory")
 EVOLUTION_MEMORY_PATH = MEMORY_ROOT / "evolution_memory.json"
 API_USAGE_LEDGER_PATH = MEMORY_ROOT / "api_usage_ledger.json"
-MAX_STATIC_BYTES = 2 * 1024 * 1024
-MAX_ANIMATED_BYTES = 500 * 1024
 STATIC_SUBMISSION_MAX_BYTES = 150 * 1024
 ANIMATED_SUBMISSION_MAX_BYTES = 650 * 1024
+MINI_STATIC_SUBMISSION_MAX_BYTES = 100 * 1024
+MINI_ANIMATED_SUBMISSION_MAX_BYTES = 500 * 1024
 
 WORKFLOW_MODES = {
     "prototype_only": "아이디어 참고용 프로토타입",
@@ -79,7 +79,7 @@ PRODUCT_MODES = {
         "static_target_bytes": STATIC_SUBMISSION_MAX_BYTES,
         "animated_target_bytes": ANIMATED_SUBMISSION_MAX_BYTES,
         "zip_allows": ["png"],
-        "note": "정지형 중심 세트입니다. 실제 제안 전 카카오 스튜디오 최신 화면에서 용량/개수를 다시 확인하세요.",
+        "note": "멈춰있는 일반 이모티콘 기준: PNG 32개, 360x360px, 개당 150KB 이하로 검토합니다.",
     },
     "standard_animated": {
         "label": "일반 이모티콘 - 움직이는",
@@ -89,27 +89,27 @@ PRODUCT_MODES = {
         "static_target_bytes": STATIC_SUBMISSION_MAX_BYTES,
         "animated_target_bytes": ANIMATED_SUBMISSION_MAX_BYTES,
         "zip_allows": ["png", "gif"],
-        "note": "움직이는 이모티콘 제안 시안용 모드입니다. 본 제작 단계에서는 전체 움직임 파일 요구가 달라질 수 있습니다.",
+        "note": "움직이는 일반 이모티콘 제안 시안 기준: 총 24개, PNG 21개 + GIF/WebP 변환용 움직임 3개, 360x360px, 움직임 파일 개당 650KB 이하로 검토합니다.",
     },
     "mini_static": {
         "label": "미니 이모티콘 - 정지형",
-        "static_count": 24,
+        "static_count": 42,
         "animated_count": 0,
-        "canvas_px": 360,
-        "static_target_bytes": STATIC_SUBMISSION_MAX_BYTES,
-        "animated_target_bytes": ANIMATED_SUBMISSION_MAX_BYTES,
+        "canvas_px": 180,
+        "static_target_bytes": MINI_STATIC_SUBMISSION_MAX_BYTES,
+        "animated_target_bytes": MINI_ANIMATED_SUBMISSION_MAX_BYTES,
         "zip_allows": ["png"],
-        "note": "미니 정지형 참고 모드입니다. 미니 이모티콘은 노출 크기와 가독성을 더 엄격히 확인하세요.",
+        "note": "멈춰있는 미니 이모티콘 기준: PNG 42개, 180x180px, 개당 100KB 이하로 검토합니다.",
     },
     "mini_animated": {
         "label": "미니 이모티콘 - 움직이는",
-        "static_count": 21,
-        "animated_count": 3,
-        "canvas_px": 360,
-        "static_target_bytes": STATIC_SUBMISSION_MAX_BYTES,
-        "animated_target_bytes": ANIMATED_SUBMISSION_MAX_BYTES,
+        "static_count": 30,
+        "animated_count": 5,
+        "canvas_px": 180,
+        "static_target_bytes": MINI_STATIC_SUBMISSION_MAX_BYTES,
+        "animated_target_bytes": MINI_ANIMATED_SUBMISSION_MAX_BYTES,
         "zip_allows": ["png", "gif"],
-        "note": "움직이는 미니 참고 모드입니다. 실제 제출 형식은 카카오 WebP 애니메이터/스튜디오 최신 안내를 확인하세요.",
+        "note": "움직이는 미니 이모티콘 기준: 총 35개, PNG 30개 + GIF/WebP 변환용 움직임 5개, 180x180px, 움직임 파일 개당 500KB 이하로 검토합니다.",
     },
 }
 
@@ -858,6 +858,7 @@ def build_revised_phrase_variant(
         phrase = phrase_slot["phrase"]
         emotion = emotion_for_key(str(phrase_slot["emotion_key"]))
         image, expression_variant = make_static_image(request, phrase, i, str(phrase_slot["emotion_key"]))
+        image = fit_image_to_product(image, spec)
         png_path = static_dir / f"static_{i + 1:02d}.png"
         jpg_path = preview_dir / f"preview_static_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_png(image, png_path, int(spec["static_target_bytes"])))
@@ -884,6 +885,7 @@ def build_revised_phrase_variant(
         phrase = phrase_slot["phrase"]
         emotion = emotion_for_key(str(phrase_slot["emotion_key"]))
         frames, expression_variant = make_animated_frames(request, phrase, i, static_count, str(phrase_slot["emotion_key"]))
+        frames = fit_frames_to_product(frames, spec)
         gif_path = animated_dir / f"animated_{i + 1:02d}.gif"
         preview_path = preview_dir / f"preview_animated_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_gif(frames, gif_path, int(spec["animated_target_bytes"])))
@@ -4102,6 +4104,17 @@ def product_mode_spec(product_mode: str) -> dict[str, object]:
     return dict(spec)
 
 
+def fit_image_to_product(image: Image.Image, spec: dict[str, object]) -> Image.Image:
+    canvas_px = int(spec.get("canvas_px", CANVAS_SIZE))
+    if image.size == (canvas_px, canvas_px):
+        return image
+    return image.resize((canvas_px, canvas_px), Image.Resampling.LANCZOS)
+
+
+def fit_frames_to_product(frames: list[Image.Image], spec: dict[str, object]) -> list[Image.Image]:
+    return [fit_image_to_product(frame, spec) for frame in frames]
+
+
 def draw_soft_bear(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str, index: int, bounce: int = 0) -> None:
     cx = 180
     cy = 166 + bounce
@@ -4981,16 +4994,16 @@ def validate_zip_entry_name(entry: str) -> list[str]:
     return problems
 
 
-def validate_image_file(path: Path, expected_format: str) -> list[dict[str, str]]:
+def validate_image_file(path: Path, expected_format: str, expected_size: int = CANVAS_SIZE) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     try:
         with Image.open(path) as image:
-            if image.size != (CANVAS_SIZE, CANVAS_SIZE):
+            if image.size != (expected_size, expected_size):
                 issues.append(
                     {
                         "level": "fail",
                         "file": str(path),
-                        "message": f"Image size is {image.size}, expected {CANVAS_SIZE}x{CANVAS_SIZE}.",
+                        "message": f"Image size is {image.size}, expected {expected_size}x{expected_size}.",
                     }
                 )
             if image.format != expected_format:
@@ -5018,6 +5031,9 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
     spec = product_mode_spec(product_mode)
     expected_static_count = int(spec["static_count"])
     expected_animated_count = int(spec["animated_count"])
+    canvas_px = int(spec.get("canvas_px", CANVAS_SIZE))
+    static_target_bytes = int(spec["static_target_bytes"])
+    animated_target_bytes = int(spec["animated_target_bytes"])
     allowed_extensions = {str(ext).lower() for ext in spec.get("zip_allows", ["png", "gif"])}
     static_dir = output_dir / "static_png_submit"
     animated_dir = output_dir / "animated_gif_submit"
@@ -5051,40 +5067,48 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
         )
 
     for file_path in static_files:
-        issues.extend(validate_image_file(file_path, "PNG"))
-        if file_path.stat().st_size > MAX_STATIC_BYTES:
+        issues.extend(validate_image_file(file_path, "PNG", canvas_px))
+        try:
+            with Image.open(file_path) as image:
+                if image.size != (canvas_px, canvas_px):
+                    issues.append(
+                        {
+                            "level": "fail",
+                            "file": str(file_path),
+                            "message": f"PNG size is {image.size[0]}x{image.size[1]}, expected {canvas_px}x{canvas_px}.",
+                        }
+                    )
+        except Exception:
+            pass
+        if file_path.stat().st_size > static_target_bytes:
             issues.append(
                 {
                     "level": "warn",
                     "file": str(file_path),
-                    "message": "PNG file is larger than the conservative 2MB safety limit.",
-                }
-            )
-        if file_path.stat().st_size > STATIC_SUBMISSION_MAX_BYTES:
-            issues.append(
-                {
-                    "level": "warn",
-                    "file": str(file_path),
-                    "message": "PNG is over 150KB, which is above the conservative static submission target.",
+                    "message": f"PNG is over {static_target_bytes // 1024}KB for {spec['label']}.",
                 }
             )
 
     for file_path in animated_files:
-        issues.extend(validate_image_file(file_path, "GIF"))
-        if file_path.stat().st_size > MAX_ANIMATED_BYTES:
+        issues.extend(validate_image_file(file_path, "GIF", canvas_px))
+        try:
+            with Image.open(file_path) as image:
+                if image.size != (canvas_px, canvas_px):
+                    issues.append(
+                        {
+                            "level": "fail",
+                            "file": str(file_path),
+                            "message": f"GIF size is {image.size[0]}x{image.size[1]}, expected {canvas_px}x{canvas_px}.",
+                        }
+                    )
+        except Exception:
+            pass
+        if file_path.stat().st_size > animated_target_bytes:
             issues.append(
                 {
                     "level": "warn",
                     "file": str(file_path),
-                    "message": "GIF file is larger than the conservative 500KB safety limit.",
-                }
-            )
-        if file_path.stat().st_size > ANIMATED_SUBMISSION_MAX_BYTES:
-            issues.append(
-                {
-                    "level": "warn",
-                    "file": str(file_path),
-                    "message": "Animated file is over 650KB, which is above the conservative animated submission target.",
+                    "message": f"Animated file is over {animated_target_bytes // 1024}KB for {spec['label']}.",
                 }
             )
 
@@ -5186,13 +5210,11 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
             "product_mode": product_mode,
             "product_label": spec["label"],
             "product_note": spec["note"],
-            "canvas_px": f"{CANVAS_SIZE}x{CANVAS_SIZE}",
+            "canvas_px": f"{canvas_px}x{canvas_px}",
             "static_png_count": expected_static_count,
             "animated_gif_count": expected_animated_count,
-            "max_static_bytes": MAX_STATIC_BYTES,
-            "max_animated_bytes": MAX_ANIMATED_BYTES,
-            "static_submission_target_bytes": spec["static_target_bytes"],
-            "animated_submission_target_bytes": spec["animated_target_bytes"],
+            "static_submission_target_bytes": static_target_bytes,
+            "animated_submission_target_bytes": animated_target_bytes,
             "submit_zip_allows": list(allowed_extensions),
         },
         "issues": issues,
@@ -5248,6 +5270,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         phrase = phrase_slot["phrase"]
         emotion = emotion_for_key(str(phrase_slot["emotion_key"]))
         image, expression_variant = make_static_image(request, phrase, i, str(phrase_slot["emotion_key"]))
+        image = fit_image_to_product(image, spec)
         png_path = static_dir / f"static_{i + 1:02d}.png"
         jpg_path = preview_dir / f"preview_static_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_png(image, png_path, int(spec["static_target_bytes"])))
@@ -5273,6 +5296,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         phrase = phrase_slot["phrase"]
         emotion = emotion_for_key(str(phrase_slot["emotion_key"]))
         frames, expression_variant = make_animated_frames(request, phrase, i, static_count, str(phrase_slot["emotion_key"]))
+        frames = fit_frames_to_product(frames, spec)
         gif_path = animated_dir / f"animated_{i + 1:02d}.gif"
         preview_path = preview_dir / f"preview_animated_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_gif(frames, gif_path, int(spec["animated_target_bytes"])))
@@ -5948,7 +5972,7 @@ def page(
         <h1>작게 만들고<br>확실하게 제출하기</h1>
         <p>
           복잡한 v92를 그대로 끌고 가지 않고, 제출물 생성에 필요한 최소 흐름부터 다시 세웁니다.
-          지금 버전은 PNG 32개, GIF 24개, 제출 ZIP을 빠르게 만드는 출발점입니다.
+          지금 버전은 일반/미니, 정지형/움직이는 유형별 개수와 용량을 분리해 제출 ZIP을 점검합니다.
         </p>
         <p><a class="memory-link" href="/results">최근 결과물</a> <a class="memory-link" href="/memory">진화 메모리 보기</a> <a class="memory-link" href="/status">실행 상태 보기</a> <a class="memory-link" href="/api-settings">API 키 안내</a> <a class="memory-link" href="/release-check">배포 점검</a></p>
         {error_html}
@@ -6017,9 +6041,11 @@ def page(
         </div>
         <div class="rules">
           <div class="rule">일반 정지형: PNG 32개</div>
-          <div class="rule">일반 움직임: PNG 21개 + GIF 3개</div>
-          <div class="rule">미니 정지형: PNG 24개</div>
-          <div class="rule">미니 움직임: PNG 21개 + GIF 3개</div>
+          <div class="rule">일반 움직임: PNG 21개 + GIF/WebP용 3개</div>
+          <div class="rule">미니 정지형: PNG 42개, 180px</div>
+          <div class="rule">미니 움직임: PNG 30개 + GIF/WebP용 5개</div>
+          <div class="rule">용량: 일반 PNG 150KB, 일반 움직임 650KB</div>
+          <div class="rule">용량: 미니 PNG 100KB, 미니 움직임 500KB</div>
           <div class="rule">API 한도 초과 시 무료 분석으로 자동 전환</div>
           <div class="rule">메모리 가중치가 다음 문구 추천에 반영</div>
         </div>

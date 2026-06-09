@@ -2,61 +2,6 @@
   "version": 1,
   "research_runs": [
     {
-      "created_at": "20260608_162902",
-      "source_count": 1,
-      "top_categories": [
-        "cute",
-        "daily",
-        "reaction"
-      ]
-    },
-    {
-      "created_at": "20260608_162918",
-      "source_count": 1,
-      "top_categories": [
-        "cute",
-        "daily",
-        "reaction"
-      ]
-    },
-    {
-      "created_at": "20260608_162935",
-      "source_count": 1,
-      "top_categories": [
-        "cute",
-        "daily",
-        "reaction"
-      ]
-    },
-    {
-      "created_at": "20260608_163910",
-      "source_count": 0,
-      "top_categories": [
-        "cute",
-        "daily",
-        "reaction",
-        "simple"
-      ]
-    },
-    {
-      "created_at": "20260608_163926",
-      "source_count": 0,
-      "top_categories": [
-        "daily",
-        "reaction",
-        "simple"
-      ]
-    },
-    {
-      "created_at": "20260608_163943",
-      "source_count": 0,
-      "top_categories": [
-        "cute",
-        "daily",
-        "reaction"
-      ]
-    },
-    {
       "created_at": "20260608_164407",
       "source_count": 0,
       "top_categories": [
@@ -1847,6 +1792,120 @@
         "recommended_sources": [],
         "caution_sources": []
       }
+    },
+    {
+      "created_at": "20260609_214034",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
+    },
+    {
+      "created_at": "20260609_214041",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
+    },
+    {
+      "created_at": "20260609_214047",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
+    },
+    {
+      "created_at": "20260609_214257",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
+    },
+    {
+      "created_at": "20260609_214302",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
+    },
+    {
+      "created_at": "20260609_214310",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
     }
   ],
   "learned_phrase_additions": [
@@ -1875,28 +1934,28 @@
   ],
   "last_compacted_at": "20260609_211559",
   "phrase_weights": {
-    "밥 먹자": 38,
-    "집 가자": 38,
-    "출근 완료": 38,
-    "그렇구나": 20,
-    "오잉?": 20,
-    "헉": 20,
-    "귀여워": 18,
-    "말랑해": 18,
-    "히히": 18
+    "밥 먹자": 44,
+    "집 가자": 44,
+    "출근 완료": 44,
+    "그렇구나": 26,
+    "오잉?": 26,
+    "헉": 26,
+    "귀여워": 24,
+    "말랑해": 24,
+    "히히": 24
   },
   "note_weights": {
-    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 38,
+    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 44,
+    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 26,
+    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 24,
     "작은 화면에서 보이도록 선을 굵게, 장식을 줄입니다.": 23,
-    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 20,
-    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 18,
     "움직임은 3단계 이상 차이가 보이되 프레임 수와 용량을 줄입니다.": 16
   },
   "category_weights": {
-    "daily": 38,
+    "daily": 44,
+    "reaction": 26,
+    "cute": 24,
     "simple": 23,
-    "reaction": 20,
-    "cute": 18,
     "motion": 16
   },
   "legal_guardrail_weights": {
