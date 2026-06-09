@@ -51,6 +51,25 @@ WORKFLOW_MODES = {
     "human_origin_review": "직접 제작 원본 검수",
 }
 
+WORKFLOW_OUTPUT_GUIDANCE = {
+    "prototype_only": {
+        "zip_prefix": "prototype_reference",
+        "purpose_label": "참고용 ZIP",
+        "decision": "카카오 제출 금지",
+        "action": "아이디어와 구도 확인용입니다. 실제 제출 전 직접 선화, 채색, 문구 검수와 원본 증빙을 별도로 준비하세요.",
+    },
+    "human_origin_review": {
+        "zip_prefix": "submit_ready_review",
+        "purpose_label": "제출 준비 검토 ZIP",
+        "decision": "사람 검수 후 제출 후보",
+        "action": "직접 제작 원본, 레이어 파일, 수정 기록, 권리 메모를 함께 확인한 뒤 제출 후보로 검토하세요.",
+    },
+}
+
+
+def workflow_guidance(workflow_mode: str) -> dict[str, str]:
+    return WORKFLOW_OUTPUT_GUIDANCE.get(workflow_mode, WORKFLOW_OUTPUT_GUIDANCE["prototype_only"])
+
 PRODUCT_MODES = {
     "standard_static": {
         "label": "일반 이모티콘 - 정지형",
@@ -2851,6 +2870,9 @@ def result_detail_page(name: str) -> str:
     validation_status = report.get("validation_status", "")
     validation_fail_count = report.get("validation_fail_count", "")
     validation_warn_count = report.get("validation_warn_count", "")
+    zip_purpose_label = report.get("zip_purpose_label", "ZIP 목적 미확인")
+    zip_decision = report.get("zip_decision", "")
+    zip_next_action = report.get("zip_next_action", "")
     readiness_score = submission.get("score", "")
     readiness_label = submission.get("decision_label", "")
     phrase_status = phrase_summary.get("status", "")
@@ -3035,6 +3057,8 @@ def result_detail_page(name: str) -> str:
     <p>{html.escape(str(report.get("concept", "")))}</p>
     <p>
       {badge("검증", validation_status)}
+      {badge("ZIP", zip_purpose_label)}
+      {badge("판정", zip_decision)}
       {badge("제출 준비", readiness_label)}
       {badge("문구 품질", phrase_status)}
       {badge("수정본", revised_status)}
@@ -3045,6 +3069,8 @@ def result_detail_page(name: str) -> str:
   <section class="panel verdict {tone(readiness_label)}">
     <h2>최종 판단</h2>
     <p><strong>{html.escape(str(readiness_label or "아직 판단 정보가 없습니다."))}</strong></p>
+    <p><strong>{html.escape(str(zip_purpose_label))}</strong>: {html.escape(str(zip_decision))}</p>
+    <p>{html.escape(str(zip_next_action))}</p>
     <p>이 화면은 자동 사전 점검용입니다. 실제 카카오 제출 전에는 사람 창작 원본, 직접 수정 기록, 권리 메모를 반드시 함께 확인해야 합니다.</p>
   </section>
   <section class="grid">
@@ -4476,6 +4502,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
     animated_dir = output_dir / "animated_gif_submit"
     preview_dir = output_dir / "preview_jpg"
     zip_candidates = [
+        output_dir / "submit_ready_review_png_gif.zip",
         output_dir / "submit_only_png_gif.zip",
         output_dir / "prototype_reference_png_gif.zip",
     ]
@@ -4656,6 +4683,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
     slug = safe_slug(request.character_name)
     output_dir = OUTPUT_ROOT / f"{timestamp}_{slug}"
     spec = product_mode_spec(request.product_mode)
+    guidance = workflow_guidance(request.workflow_mode)
     static_count = int(spec["static_count"])
     animated_count = int(spec["animated_count"])
     static_dir = output_dir / "static_png_submit"
@@ -4745,9 +4773,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
             }
         )
 
-    zip_name = "submit_only_png_gif.zip"
-    if request.workflow_mode == "prototype_only":
-        zip_name = "prototype_reference_png_gif.zip"
+    zip_name = f"{guidance['zip_prefix']}_png_gif.zip"
     zip_path = output_dir / zip_name
     optimization = optimization_summary(optimization_records)
     write_zip(zip_path, [*static_files, *animated_files], output_dir)
@@ -4755,6 +4781,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
     human_origin_checklist = {
         "workflow_mode": request.workflow_mode,
         "workflow_label": WORKFLOW_MODES.get(request.workflow_mode, WORKFLOW_MODES["prototype_only"]),
+        "workflow_output": guidance,
         "product_mode": request.product_mode,
         "product_label": spec["label"],
         "human_origin_note": request.human_origin_note,
@@ -4842,6 +4869,9 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "animated_gif_count": len(animated_files),
         "preview_jpg_count": len(preview_files),
         "zip": str(zip_path),
+        "zip_purpose_label": guidance["purpose_label"],
+        "zip_decision": guidance["decision"],
+        "zip_next_action": guidance["action"],
         "optimization": {
             "enabled": True,
             "missed_target_count": optimization["missed_target_count"],
@@ -4979,6 +5009,9 @@ def page(
         report = result.get("report", {})
         auto_phrase_count = html.escape(str(report.get("auto_phrase_count", "?"))) if isinstance(report, dict) else "?"
         workflow_label = html.escape(str(report.get("workflow_label", "알 수 없음"))) if isinstance(report, dict) else "알 수 없음"
+        zip_purpose_label = html.escape(str(report.get("zip_purpose_label", "ZIP 목적 미확인"))) if isinstance(report, dict) else "ZIP 목적 미확인"
+        zip_decision = html.escape(str(report.get("zip_decision", ""))) if isinstance(report, dict) else ""
+        zip_next_action = html.escape(str(report.get("zip_next_action", ""))) if isinstance(report, dict) else ""
         product_label = html.escape(str(report.get("product_label", "알 수 없음"))) if isinstance(report, dict) else "알 수 없음"
         static_png_count = html.escape(str(report.get("static_png_count", 0))) if isinstance(report, dict) else "0"
         animated_gif_count = html.escape(str(report.get("animated_gif_count", 0))) if isinstance(report, dict) else "0"
@@ -5061,6 +5094,8 @@ def page(
         <section class="result">
           <h2>생성 완료</h2>
           <p><strong>작업 모드</strong><br>{workflow_label}</p>
+          <p><strong>ZIP 목적</strong><br>{zip_purpose_label} / {zip_decision}</p>
+          <p><strong>다음 조치</strong><br>{zip_next_action}</p>
           <p><strong>상품 종류</strong><br>{product_label}</p>
           <p><strong>자동 성격</strong><br>{personality}</p>
           <p><strong>자동 말투</strong><br>{speech_style}</p>
