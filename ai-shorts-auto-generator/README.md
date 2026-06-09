@@ -1,0 +1,74 @@
+# AI Shorts Auto Generator
+
+AI Shorts Auto Generator is a clean rebuild of the previous Shorts Auto Maker prototype.
+
+The goal is to help one creator plan, produce, review, learn from, and safely publish short-form videos without losing progress between PCs.
+
+## Canonical Repository
+
+Use this GitHub repository for storage and cross-PC continuation:
+
+```text
+https://github.com/se5139/my-app.git
+```
+
+The project is stored under:
+
+```text
+ai-shorts-auto-generator/
+```
+
+## Save Rule
+
+Every completed unit of work must be saved so another PC can continue at any time.
+
+Required completion flow:
+
+1. Save changed project files.
+2. Commit the completed work.
+3. Push to `origin/main`.
+4. Keep setup and resume instructions current.
+
+## Resume On Another PC
+
+```powershell
+git clone https://github.com/se5139/my-app.git
+cd my-app\ai-shorts-auto-generator
+```
+
+Then follow the latest setup and run instructions in this folder.
+
+## Rebuild Direction
+
+The old reference package is kept only as a direction sample. The rebuild will focus on:
+
+- A simple production pipeline: idea -> script -> assets -> video draft -> review -> publish package.
+- Durable autosave state for every project and job.
+- Clear Korean-first UI without broken text encoding.
+- Local-first operation with optional AI/API integrations.
+- Cost and upload safety gates before any paid API or public upload action.
+- Growth learning from manually imported YouTube Studio metrics.
+- Weekly 2 to 3 draft generation plans with human approval before upload.
+
+See `docs/REFERENCE_REVIEW.md` and `docs/REBUILD_BLUEPRINT.md`.
+
+## Current Foundation
+
+- `src/ai_shorts/state.py`: autosaved app/project state.
+- `src/ai_shorts/compliance.py`: legal, policy, originality, synthetic disclosure, and monetization risk gates.
+- `src/ai_shorts/weekly_planner.py`: weekly 2 to 3 draft planning based on topic insights.
+
+The app must generate compliant draft packages first. Public upload automation is intentionally not enabled in phase 1.
+
+## Local Git Setup For This PC
+
+Git is required before local commits and pushes can run.
+
+After Git is installed:
+
+```powershell
+git clone https://github.com/se5139/my-app.git
+cd my-app\ai-shorts-auto-generator
+```
+
+If working from the existing OneDrive folder, initialize only after confirming how this local folder should sync with the remote repository.

@@ -1,0 +1,25 @@
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Logs and temp files
+*.log
+tmp/
+temp/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/

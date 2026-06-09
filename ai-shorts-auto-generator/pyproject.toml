@@ -1,0 +1,10 @@
+[project]
+name = "ai-shorts-auto-generator"
+version = "0.1.0"
+description = "Clean rebuild of a Korean-first AI shorts automation workspace."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
