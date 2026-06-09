@@ -2812,6 +2812,7 @@ def result_detail_page(name: str) -> str:
     if not isinstance(report, dict):
         return page(error="build_report.json을 읽을 수 없습니다.")
     readiness = read_json_file(output_dir / "submission_readiness_report.json", {})
+    validation = read_json_file(output_dir / "validation_report.json", {})
     phrase_quality = read_json_file(output_dir / "phrase_quality_report.json", {})
     replacements = read_json_file(output_dir / "phrase_replacement_suggestions.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
@@ -2848,6 +2849,8 @@ def result_detail_page(name: str) -> str:
     if not isinstance(phrase_summary, dict):
         phrase_summary = {}
     validation_status = report.get("validation_status", "")
+    validation_fail_count = report.get("validation_fail_count", "")
+    validation_warn_count = report.get("validation_warn_count", "")
     readiness_score = submission.get("score", "")
     readiness_label = submission.get("decision_label", "")
     phrase_status = phrase_summary.get("status", "")
@@ -2893,6 +2896,28 @@ def result_detail_page(name: str) -> str:
 
     preview_pairs_html = preview_pair_html()
 
+    validation_issues = validation.get("issues", []) if isinstance(validation, dict) else []
+    validation_rules = validation.get("rules", {}) if isinstance(validation, dict) else {}
+    validation_html = html_list(
+        [
+            f"{issue.get('level', '')}: {issue.get('file', '')} / {issue.get('message', '')}"
+            for issue in validation_issues[:12]
+            if isinstance(issue, dict)
+        ],
+        "제출 ZIP/이미지 규격 이슈가 없습니다.",
+    )
+    validation_rule_html = html_list(
+        [
+            f"상품: {validation_rules.get('product_label', '')}",
+            f"캔버스: {validation_rules.get('canvas_px', '')}",
+            f"필요 PNG: {validation_rules.get('static_png_count', '')}",
+            f"필요 GIF: {validation_rules.get('animated_gif_count', '')}",
+            f"허용 확장자: {', '.join(str(ext) for ext in validation_rules.get('submit_zip_allows', []))}",
+        ]
+        if isinstance(validation_rules, dict)
+        else [],
+        "검증 규칙 정보가 없습니다.",
+    )
     top_risks = readiness.get("top_risks", []) if isinstance(readiness, dict) else []
     readiness_checks = readiness.get("checks", []) if isinstance(readiness, dict) else []
     checks_html = html_list(
@@ -3023,7 +3048,7 @@ def result_detail_page(name: str) -> str:
     <p>이 화면은 자동 사전 점검용입니다. 실제 카카오 제출 전에는 사람 창작 원본, 직접 수정 기록, 권리 메모를 반드시 함께 확인해야 합니다.</p>
   </section>
   <section class="grid">
-    <div class="metric {tone(validation_status)}"><span>자동 검증</span><strong>{html.escape(str(validation_status))}</strong>{badge("상태", validation_status)}</div>
+    <div class="metric {tone(validation_status)}"><span>자동 검증</span><strong>{html.escape(str(validation_status))}</strong><p>실패 {html.escape(str(validation_fail_count))} / 경고 {html.escape(str(validation_warn_count))}</p>{badge("상태", validation_status)}</div>
     <div class="metric {tone(readiness_label)}"><span>제출 준비 점수</span><strong>{html.escape(str(readiness_score))}</strong><p>{html.escape(str(readiness_label))}</p></div>
     <div class="metric {tone(phrase_status)}"><span>문구 품질</span><strong>{html.escape(str(phrase_status))}</strong><p>{html.escape(str(phrase_score))}점</p></div>
     <div class="metric {tone(revised_status)}"><span>수정본 품질</span><strong>{html.escape(str(revised_status))}</strong><p>{html.escape(str(revised_score))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
@@ -3033,6 +3058,20 @@ def result_detail_page(name: str) -> str:
     <div class="metric"><span>준비 점수</span><strong>{html.escape(str(report.get("submission_readiness", {}).get("score", "")))}</strong><p>{html.escape(str(report.get("submission_readiness", {}).get("decision_label", "")))}</p></div>
     <div class="metric"><span>문구 품질</span><strong>{html.escape(str(report.get("phrase_quality", {}).get("status", "")))}</strong><p>{html.escape(str(report.get("phrase_quality", {}).get("score", "")))}점</p></div>
     <div class="metric"><span>수정판</span><strong>{html.escape(str(revised.get("quality_status", "")))}</strong><p>{html.escape(str(revised.get("quality_score", "")))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
+  </section>
+  <section class="panel">
+    <h2>제출 ZIP/이미지 자동 검사</h2>
+    <p>ZIP 무결성, 내부 경로, 중복 파일명, JPG 포함 여부, PNG/GIF 개수와 형식을 확인합니다.</p>
+    <div class="grid">
+      <div>
+        <h2>검사 이슈</h2>
+        {validation_html}
+      </div>
+      <div>
+        <h2>적용 규칙</h2>
+        {validation_rule_html}
+      </div>
+    </div>
   </section>
   <section class="panel">
     <h2>반려 가능성 체크</h2>
