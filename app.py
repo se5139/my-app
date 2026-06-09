@@ -479,6 +479,108 @@ def expression_diversity_summary(expression_plan: list[dict[str, str]]) -> dict[
     }
 
 
+def build_weak_cut_review(
+    phrase_plan: list[dict[str, str]],
+    expression_plan: list[dict[str, str]],
+    phrase_quality: dict[str, object],
+) -> dict[str, object]:
+    phrase_counts = phrase_counts_for_plan(phrase_plan)
+    phrase_issue_by_slot: dict[str, list[str]] = {}
+    for issue in phrase_quality.get("issues", []):
+        if not isinstance(issue, dict):
+            continue
+        slot = str(issue.get("slot", ""))
+        if not slot or slot == "-":
+            continue
+        phrase_issue_by_slot.setdefault(slot, []).append(str(issue.get("message", "")))
+
+    items: list[dict[str, object]] = []
+    previous_signature = ""
+    for index, phrase_slot in enumerate(phrase_plan):
+        expression_item = expression_plan[index] if index < len(expression_plan) else {}
+        phrase = str(phrase_slot.get("phrase", ""))
+        slot = str(phrase_slot.get("slot", index + 1))
+        compact = compact_phrase_key(phrase)
+        emotion_key = str(phrase_slot.get("emotion_key", expression_item.get("emotion_key", "")))
+        try:
+            variant = json.loads(str(expression_item.get("expression_variant", "{}")))
+        except Exception:
+            variant = {}
+        if not isinstance(variant, dict):
+            variant = {}
+        gesture = str(variant.get("gesture", ""))
+        variant_id = str(variant.get("variant_id", ""))
+        signature = "|".join([emotion_key, gesture, variant_id])
+        score = 100
+        flags: list[str] = []
+        suggestions: list[str] = []
+
+        if phrase_counts.get(compact, 0) >= 2:
+            score -= 22
+            flags.append("문구 반복")
+            suggestions.append("같은 의미라도 감정이나 상황이 다르게 보이도록 짧은 대체 문구를 넣으세요.")
+        if len(compact) > 10:
+            score -= 14
+            flags.append("문구 김")
+            suggestions.append(f"'{suggest_shorter_phrase(phrase)}'처럼 더 짧게 줄이면 작은 화면에서 읽기 쉽습니다.")
+        if str(phrase_slot.get("source", "")) in {"auto", "research_memory"}:
+            score -= 8
+            flags.append("자동 문구")
+            suggestions.append("최종 제출 후보에서는 캐릭터 말투에 맞게 사람이 직접 문구를 다듬으세요.")
+        if signature and signature == previous_signature:
+            score -= 18
+            flags.append("인접 컷 동작 유사")
+            suggestions.append("인접 컷과 다른 손동작, 입 모양, 효과를 선택하면 검토 그리드에서 구분이 쉬워집니다.")
+        if variant_id and sum(
+            1
+            for expression in expression_plan
+            if variant_id in str(expression.get("expression_variant", ""))
+        ) >= 3:
+            score -= 10
+            flags.append("표정 변주 반복")
+            suggestions.append("같은 표정 변주가 많은 경우 손 위치나 볼 효과를 바꿔 반복감을 낮추세요.")
+        for message in phrase_issue_by_slot.get(slot, []):
+            score -= 10
+            flags.append("문구 품질 주의")
+            suggestions.append(message)
+
+        score = max(0, min(100, score))
+        if score < 70 or flags:
+            items.append(
+                {
+                    "slot": slot,
+                    "score": score,
+                    "phrase": phrase,
+                    "emotion": str(phrase_slot.get("emotion", expression_item.get("emotion", ""))),
+                    "emotion_key": emotion_key,
+                    "gesture": gesture,
+                    "variant_id": variant_id,
+                    "flags": unique_keep_order(flags),
+                    "suggestions": unique_keep_order(suggestions)[:4],
+                    "preview_hint": expression_item.get("file", ""),
+                }
+            )
+        previous_signature = signature
+
+    priority = sorted(items, key=lambda item: (int(item.get("score", 100)), int(str(item.get("slot", "0")).split("-")[0] or 0)))
+    strong_count = sum(1 for item in priority if int(item.get("score", 100)) >= 85)
+    review_count = len(priority)
+    status = "pass" if review_count == 0 else "review"
+    return {
+        "enabled": True,
+        "status": status,
+        "review_count": review_count,
+        "strong_count": strong_count,
+        "priority_slots": priority[:12],
+        "rules": {
+            "phrase_duplication": "같은 문구 키가 2회 이상이면 우선 검토합니다.",
+            "long_phrase": "10자 초과 문구는 작은 화면 가독성 관점에서 점검합니다.",
+            "neighbor_similarity": "인접 컷의 감정, 손동작, 표정 변주가 같으면 반복감으로 봅니다.",
+            "safe_scope": "이 검사는 내부 반복과 가독성만 점검하며 타 작품 유사성 판단을 대신하지 않습니다.",
+        },
+    }
+
+
 def build_next_generation_direction(
     phrase_quality: dict[str, object],
     replacements: dict[str, object],
@@ -2925,6 +3027,7 @@ def result_detail_page(name: str) -> str:
     validation = read_json_file(output_dir / "validation_report.json", {})
     phrase_quality = read_json_file(output_dir / "phrase_quality_report.json", {})
     replacements = read_json_file(output_dir / "phrase_replacement_suggestions.json", {})
+    weak_cut_review = read_json_file(output_dir / "weak_cut_review.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -2950,7 +3053,7 @@ def result_detail_page(name: str) -> str:
         text = str(value or "").lower()
         if any(word in text for word in ["fail", "blocked", "reject", "위험", "반려"]):
             return "danger"
-        if any(word in text for word in ["warn", "manual", "missing", "수정", "주의", "권장"]):
+        if any(word in text for word in ["warn", "review", "manual", "missing", "수정", "주의", "권장", "검토"]):
             return "warn"
         if any(word in text for word in ["pass", "ready", "가능", "완료"]):
             return "good"
@@ -2978,6 +3081,11 @@ def result_detail_page(name: str) -> str:
     phrase_score = phrase_summary.get("score", "")
     revised_status = revised.get("quality_status", "")
     revised_score = revised.get("quality_score", "")
+    weak_cut_summary = report.get("weak_cut_review", {})
+    if not isinstance(weak_cut_summary, dict):
+        weak_cut_summary = {}
+    weak_cut_status = weak_cut_summary.get("status", weak_cut_review.get("status", "미생성") if isinstance(weak_cut_review, dict) else "미생성")
+    weak_cut_count = weak_cut_summary.get("review_count", weak_cut_review.get("review_count", 0) if isinstance(weak_cut_review, dict) else 0)
 
     def file_href(path: Path) -> str:
         return "/" + str(path).replace("\\", "/")
@@ -3081,6 +3189,17 @@ def result_detail_page(name: str) -> str:
         ],
         "대체 문구 제안이 없습니다.",
     )
+    weak_cut_items = weak_cut_review.get("priority_slots", []) if isinstance(weak_cut_review, dict) else []
+    weak_cut_html = html_list(
+        [
+            f"#{item.get('slot', '')} {item.get('phrase', '')} / 점수 {item.get('score', '')}: "
+            f"{', '.join(str(flag) for flag in item.get('flags', [])[:4])} -> "
+            f"{' '.join(str(suggestion) for suggestion in item.get('suggestions', [])[:2])}"
+            for item in weak_cut_items[:12]
+            if isinstance(item, dict)
+        ],
+        "자동으로 우선 검토할 약한 컷이 없습니다.",
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3160,6 +3279,8 @@ def result_detail_page(name: str) -> str:
     .review-phrase {{ margin:10px 0 4px; color:#2d2424; font-weight:900; }}
     .review-meta {{ margin:0; font-size:12px; color:#8a7b70; }}
     .direction-note {{ padding:14px 16px; border-radius:18px; background:#fff3d8; border:1px solid #f2cc80; color:#6b4c16; font-weight:800; }}
+    .weak-cut {{ background:#fff8df; border-color:#e9c961; }}
+    .weak-cut strong {{ color:#6c5311; }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
@@ -3211,6 +3332,7 @@ def result_detail_page(name: str) -> str:
     <div class="metric {tone(phrase_status)}"><span>문구 품질</span><strong>{html.escape(str(phrase_status))}</strong><p>{html.escape(str(phrase_score))}점</p></div>
     <div class="metric {tone(revised_status)}"><span>수정본 품질</span><strong>{html.escape(str(revised_status))}</strong><p>{html.escape(str(revised_score))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
     <div class="metric neutral"><span>표정/손동작 다양성</span><strong>{html.escape(str(expression_diversity.get("variant_type_count", "")))}</strong><p>감정 {html.escape(str(expression_diversity.get("emotion_type_count", "")))}종 / 손동작 {html.escape(str(expression_diversity.get("gesture_type_count", "")))}종</p></div>
+    <div class="metric {tone(weak_cut_status)}"><span>우선 검토 컷</span><strong>{html.escape(str(weak_cut_count))}</strong><p>{html.escape(str(weak_cut_status))} / weak_cut_review.json</p></div>
   </section>
   <section class="grid">
     <div class="metric"><span>자동 검사</span><strong>{html.escape(str(report.get("validation_status", "")))}</strong></div>
@@ -3235,6 +3357,11 @@ def result_detail_page(name: str) -> str:
   <section class="panel">
     <h2>반려 가능성 체크</h2>
     {risk_html}
+  </section>
+  <section class="panel weak-cut">
+    <h2>중복/약한 컷 자동 감지</h2>
+    <p>문구 반복, 긴 문구, 자동 문구, 인접 컷의 표정/손동작 반복을 기준으로 먼저 볼 컷을 추립니다. 타 작품 유사성 판단은 아니므로 최종 제출 전 사람 검토가 필요합니다.</p>
+    {weak_cut_html}
   </section>
   <section class="panel">
     <h2>스토어형 빠른 검토 그리드</h2>
@@ -4657,6 +4784,7 @@ def build_creator_evidence_package(
         output_dir / "sketch_consistency_report.json",
         output_dir / "phrase_quality_report.json",
         output_dir / "phrase_replacement_suggestions.json",
+        output_dir / "weak_cut_review.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
@@ -5167,6 +5295,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         )
 
     expression_diversity = expression_diversity_summary(expression_plan)
+    weak_cut_review = build_weak_cut_review(phrase_plan, expression_plan, phrase_quality)
     zip_name = f"{guidance['zip_prefix']}_png_gif.zip"
     zip_path = output_dir / zip_name
     optimization = optimization_summary(optimization_records)
@@ -5238,6 +5367,12 @@ def build_package(request: BuildRequest) -> dict[str, object]:
             "report_file": "expression_plan.json",
         },
         "expression_diversity": expression_diversity,
+        "weak_cut_review": {
+            "enabled": True,
+            "status": weak_cut_review["status"],
+            "review_count": weak_cut_review["review_count"],
+            "report_file": "weak_cut_review.json",
+        },
         "phrase_emotion_matching": emotion_matching,
         "phrase_quality": {
             "status": phrase_quality["status"],
@@ -5321,6 +5456,10 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         json.dumps(expression_plan, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    (output_dir / "weak_cut_review.json").write_text(
+        json.dumps(weak_cut_review, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (output_dir / "next_generation_direction.json").write_text(
         json.dumps(next_generation_direction, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -5389,6 +5528,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "evidence_package": evidence_package,
         "phrase_quality": phrase_quality,
         "phrase_replacements": phrase_replacements,
+        "weak_cut_review": weak_cut_review,
         "revised_phrase_variant": revised_phrase_variant,
         "preview_gallery": preview_gallery,
     }
