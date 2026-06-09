@@ -3370,6 +3370,17 @@ def fit_caption_font(
     return find_font(min_size, bold=True)
 
 
+def caption_font_size_for_text(text: str) -> int:
+    compact = compact_phrase_key(text)
+    if len(compact) <= 3:
+        return 48
+    if len(compact) <= 5:
+        return 44
+    if len(compact) <= 8:
+        return 40
+    return 34
+
+
 def draw_caption_panel(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -3377,29 +3388,57 @@ def draw_caption_panel(
     bottom: int = 344,
     max_width: int = 268,
 ) -> None:
-    font = fit_caption_font(text, max_width=max_width, max_lines=2, max_height=bottom - top - 12)
-    lines = wrap_text(text, font, max_width)[:2]
+    compact = compact_phrase_key(text)
+    max_lines = 1 if len(compact) <= 8 else 2
+    start_size = caption_font_size_for_text(text)
+    font = fit_caption_font(
+        text,
+        max_width=max_width,
+        max_lines=max_lines,
+        max_height=bottom - top - 12,
+        start_size=start_size,
+        min_size=22,
+    )
+    lines = wrap_text(text, font, max_width)[:max_lines]
     line_heights = [font.getbbox(line)[3] - font.getbbox(line)[1] for line in lines]
     total_height = sum(line_heights) + max(0, len(lines) - 1) * 4
     panel_left = 45
     panel_right = CANVAS_SIZE - 45
     draw.rounded_rectangle(
+        (panel_left + 3, top + 4, panel_right + 3, bottom + 4),
+        radius=20,
+        fill="#ead8bc",
+    )
+    draw.rounded_rectangle(
         (panel_left, top, panel_right, bottom),
         radius=20,
         fill="#fffdf7",
-        outline="#ead8bc",
-        width=2,
+        outline="#2d2424" if len(compact) <= 8 else "#ead8bc",
+        width=3 if len(compact) <= 8 else 2,
     )
+    if len(compact) <= 8:
+        draw.rounded_rectangle((panel_left + 12, top + 7, panel_left + 34, top + 13), radius=3, fill="#7fd8be")
+        draw.rounded_rectangle((panel_right - 34, bottom - 13, panel_right - 12, bottom - 7), radius=3, fill="#ff9f8a")
     y = top + max(4, (bottom - top - total_height) // 2 - 1)
     for line, height in zip(lines, line_heights):
         box = font.getbbox(line)
         width = box[2] - box[0]
+        x = CANVAS_SIZE / 2 - width / 2
+        baseline_y = y - box[1]
         draw.text(
-            (CANVAS_SIZE / 2 - width / 2, y - box[1]),
+            (x + 2, baseline_y + 2),
+            line,
+            font=font,
+            fill="#f2cc80",
+            stroke_width=2,
+            stroke_fill="#f2cc80",
+        )
+        draw.text(
+            (x, baseline_y),
             line,
             font=font,
             fill="#2d2424",
-            stroke_width=2,
+            stroke_width=3 if len(compact) <= 8 else 2,
             stroke_fill="#ffffff",
         )
         y += height + 4
@@ -3675,6 +3714,20 @@ def draw_expression_overlay(
     accent = "#ff8f4f"
     white = "#ffffff"
 
+    emphasis_colors = {
+        "happy": "#ffca72",
+        "thanks": "#ff9fb3",
+        "cheer": "#ff8f4f",
+        "sorry": "#9ee7ff",
+        "love": "#ff6f91",
+        "surprise": "#7ab7ff",
+        "rest": "#a7d8ff",
+        "party": "#7fd8be",
+    }
+    emphasis = emphasis_colors.get(emotion_key, "#ffca72")
+    draw.arc((92 + wiggle, 104 + bounce, 268 + wiggle, 246 + bounce), start=205, end=335, fill="#ffffff", width=8)
+    draw.arc((92 + wiggle, 104 + bounce, 268 + wiggle, 246 + bounce), start=205, end=335, fill=emphasis, width=4)
+
     def draw_eye_symbol(x: int, mode: str) -> None:
         if mode == "smile":
             draw.arc((x - 14, eye_y - 6, x + 14, eye_y + 16), start=20, end=160, fill=ink, width=5)
@@ -3741,35 +3794,47 @@ def draw_expression_overlay(
 
     gesture = str(variant["gesture"])
     hand_y = 226 + bounce
+    if emotion_key in {"happy", "cheer", "party"}:
+        draw.line((70, hand_y - 58, 96, hand_y - 72), fill=emphasis, width=5)
+        draw.line((264, hand_y - 72, 290, hand_y - 58), fill=emphasis, width=5)
+    elif emotion_key in {"sorry", "rest"}:
+        draw.arc((78, hand_y - 52, 126, hand_y - 22), start=15, end=165, fill=emphasis, width=4)
+        draw.arc((234, hand_y - 52, 282, hand_y - 22), start=15, end=165, fill=emphasis, width=4)
+    elif emotion_key in {"love", "thanks"}:
+        draw.text((66 + wiggle, hand_y - 72), "♥", font=find_font(22, bold=True), fill=emphasis, stroke_width=2, stroke_fill="#ffffff")
+        draw.text((274 - wiggle, hand_y - 72), "♥", font=find_font(22, bold=True), fill=emphasis, stroke_width=2, stroke_fill="#ffffff")
+    elif emotion_key == "surprise":
+        draw.text((72 + wiggle, hand_y - 78), "!", font=find_font(30, bold=True), fill=emphasis, stroke_width=2, stroke_fill="#ffffff")
+        draw.text((272 - wiggle, hand_y - 78), "?", font=find_font(28, bold=True), fill=emphasis, stroke_width=2, stroke_fill="#ffffff")
     if gesture == "tiny_up_hands":
-        draw.line((116, hand_y + 4, 92, hand_y - 12), fill=ink, width=5)
-        draw.line((244, hand_y + 4, 268, hand_y - 12), fill=ink, width=5)
-        draw.ellipse((82, hand_y - 26, 108, hand_y), fill=white, outline=ink, width=4)
-        draw.ellipse((252, hand_y - 26, 278, hand_y), fill=white, outline=ink, width=4)
+        draw.line((116, hand_y + 4, 90, hand_y - 16), fill=ink, width=6)
+        draw.line((244, hand_y + 4, 270, hand_y - 16), fill=ink, width=6)
+        draw.ellipse((79, hand_y - 31, 110, hand_y + 1), fill=white, outline=ink, width=5)
+        draw.ellipse((250, hand_y - 31, 281, hand_y + 1), fill=white, outline=ink, width=5)
     elif gesture == "bow_hands":
-        draw.arc((128, hand_y - 8, 176, hand_y + 28), start=210, end=330, fill=ink, width=5)
-        draw.arc((184, hand_y - 8, 232, hand_y + 28), start=210, end=330, fill=ink, width=5)
+        draw.arc((124, hand_y - 10, 178, hand_y + 30), start=210, end=330, fill=ink, width=6)
+        draw.arc((182, hand_y - 10, 236, hand_y + 30), start=210, end=330, fill=ink, width=6)
     elif gesture == "fists":
-        draw.ellipse((82, hand_y - 14, 116, hand_y + 20), fill=white, outline=ink, width=5)
-        draw.ellipse((244, hand_y - 14, 278, hand_y + 20), fill=white, outline=ink, width=5)
+        draw.ellipse((78, hand_y - 18, 118, hand_y + 22), fill=white, outline=ink, width=6)
+        draw.ellipse((242, hand_y - 18, 282, hand_y + 22), fill=white, outline=ink, width=6)
     elif gesture == "folded_hands":
-        draw.line((146, hand_y - 4, 178, hand_y + 22), fill=ink, width=5)
-        draw.line((214, hand_y - 4, 182, hand_y + 22), fill=ink, width=5)
+        draw.line((144, hand_y - 6, 178, hand_y + 24), fill=ink, width=6)
+        draw.line((216, hand_y - 6, 182, hand_y + 24), fill=ink, width=6)
     elif gesture == "hug":
-        draw.arc((84, hand_y - 24, 174, hand_y + 44), start=220, end=350, fill=ink, width=5)
-        draw.arc((186, hand_y - 24, 276, hand_y + 44), start=190, end=320, fill=ink, width=5)
+        draw.arc((80, hand_y - 28, 176, hand_y + 48), start=220, end=350, fill=ink, width=6)
+        draw.arc((184, hand_y - 28, 280, hand_y + 48), start=190, end=320, fill=ink, width=6)
     elif gesture == "raised_hands":
-        draw.line((108, hand_y, 82, hand_y - 36), fill=ink, width=5)
-        draw.line((252, hand_y, 278, hand_y - 36), fill=ink, width=5)
-        draw.ellipse((70, hand_y - 50, 96, hand_y - 24), fill=white, outline=ink, width=4)
-        draw.ellipse((264, hand_y - 50, 290, hand_y - 24), fill=white, outline=ink, width=4)
+        draw.line((108, hand_y, 80, hand_y - 40), fill=ink, width=6)
+        draw.line((252, hand_y, 280, hand_y - 40), fill=ink, width=6)
+        draw.ellipse((67, hand_y - 55, 98, hand_y - 24), fill=white, outline=ink, width=5)
+        draw.ellipse((262, hand_y - 55, 293, hand_y - 24), fill=white, outline=ink, width=5)
     elif gesture == "blanket":
-        draw.rounded_rectangle((110, hand_y - 2, 250, hand_y + 44), radius=18, fill="#dff4ff", outline=ink, width=4)
+        draw.rounded_rectangle((106, hand_y - 4, 254, hand_y + 48), radius=18, fill="#dff4ff", outline=ink, width=5)
     elif gesture == "celebrate":
-        draw.line((108, hand_y, 78, hand_y - 42), fill=ink, width=5)
-        draw.line((252, hand_y, 282, hand_y - 42), fill=ink, width=5)
-        draw.ellipse((66, hand_y - 56, 92, hand_y - 30), fill=white, outline=ink, width=4)
-        draw.ellipse((268, hand_y - 56, 294, hand_y - 30), fill=white, outline=ink, width=4)
+        draw.line((108, hand_y, 76, hand_y - 46), fill=ink, width=6)
+        draw.line((252, hand_y, 284, hand_y - 46), fill=ink, width=6)
+        draw.ellipse((62, hand_y - 61, 94, hand_y - 29), fill=white, outline=ink, width=5)
+        draw.ellipse((266, hand_y - 61, 298, hand_y - 29), fill=white, outline=ink, width=5)
         draw_star(draw, 72, hand_y - 58, 9, "#ffca72")
         draw_star(draw, 288, hand_y - 58, 9, "#ffca72")
 
