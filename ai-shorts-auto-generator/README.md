@@ -108,6 +108,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - render placeholder generation with scene SVG files and `render_plan.json`
 - render review package with `timeline.html` and `render_manifest.json`
 - render preview package with PNG frames, animated GIF, and `preview_manifest.json`
+- ffmpeg detection and optional MP4 conversion status
 
 ## Local Git Setup For This PC
 

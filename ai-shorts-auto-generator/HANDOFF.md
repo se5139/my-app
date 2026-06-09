@@ -188,6 +188,31 @@ Next recommended work:
 - Add optional ffmpeg discovery/install guidance and MP4 conversion when ffmpeg is available.
 - Then add render approval/export status.
 
+## 2026-06-09 MP4 Conversion Readiness Step
+
+Added ffmpeg readiness and optional MP4 conversion:
+
+- `src/ai_shorts/ffmpeg_renderer.py` detects `ffmpeg` in PATH.
+- If ffmpeg exists, it can convert preview PNG frames into `preview.mp4`.
+- If ffmpeg is missing, it writes `mp4_status.json` with status `ffmpeg_missing` and install guidance.
+- Detail screen now has "ffmpeg 확인" and "MP4 변환 시도" actions.
+
+Current environment:
+
+- `ffmpeg` was not found in PATH.
+- `moviepy`, `imageio`, and `cv2` were not installed in the bundled Python.
+- `PIL` was available, so PNG/GIF preview remains the working render path.
+
+Verification target:
+
+- Compile ffmpeg renderer, workflow, web, and tests.
+- End-to-end create draft, generate placeholder, generate GIF preview, check MP4 status, and verify `mp4_status.json`.
+
+Next recommended work:
+
+- Add a guided ffmpeg install/download option if the user approves.
+- Or add render approval/export status using GIF/timeline assets while MP4 waits.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

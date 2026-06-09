@@ -8,6 +8,7 @@ from ai_shorts.web_app import _render_page, _render_project_detail
 from ai_shorts.script_lab import script_draft_from_dict
 from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
+from ai_shorts.ffmpeg_renderer import mp4_status
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -111,3 +112,10 @@ def test_preview_media_creates_gif_and_manifest(tmp_path) -> None:
     assert manifest["status"] == "preview_ready"
     assert (tmp_path / "renders" / "preview" / "preview.gif").exists()
     assert (tmp_path / "renders" / "preview" / "preview_manifest.json").exists()
+
+
+def test_mp4_status_records_ffmpeg_state(tmp_path) -> None:
+    (tmp_path / "renders" / "preview").mkdir(parents=True)
+    status = mp4_status(tmp_path)
+    assert "ffmpeg_available" in status
+    assert (tmp_path / "renders" / "preview" / "mp4_status.json").exists()

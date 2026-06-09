@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .package_exporter import export_manual_upload_package
+from .ffmpeg_renderer import mp4_status, render_mp4_from_preview
 from .paths import PROJECTS_DIR, ensure_data_dirs
 from .render_placeholder import create_render_placeholders
 from .render_preview import create_preview_media
@@ -91,3 +92,15 @@ def generate_preview_render(project_id: str) -> dict[str, Any]:
     if not (project_dir / "renders" / "placeholder" / "render_plan.json").exists():
         generate_placeholder_render(project_id)
     return create_preview_media(project_id, project_dir)
+
+
+def check_or_render_mp4(project_id: str, render: bool = False) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    if not (project_dir / "renders" / "preview" / "preview_manifest.json").exists():
+        generate_preview_render(project_id)
+    if render:
+        return render_mp4_from_preview(project_id, project_dir)
+    return mp4_status(project_dir)

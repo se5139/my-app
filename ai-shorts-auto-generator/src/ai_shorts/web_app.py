@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .workflow import create_draft_package, generate_placeholder_render, generate_preview_render, update_draft_script
+from .workflow import check_or_render_mp4, create_draft_package, generate_placeholder_render, generate_preview_render, update_draft_script
 
 
 HOST = "127.0.0.1"
@@ -68,6 +68,7 @@ def _render_project_detail(project_id: str) -> str:
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
+    mp4_info = read_json(preview_dir / "mp4_status.json", {})
 
     scenes = "".join(
         "<tr>"
@@ -146,6 +147,10 @@ def _render_project_detail(project_id: str) -> str:
     )
     if not preview_rows:
         preview_rows = '<tr><td colspan="3" class="muted">아직 미리보기 프레임이 없습니다.</td></tr>'
+    mp4_status = mp4_info.get("status", "not_checked") if isinstance(mp4_info, dict) else "not_checked"
+    mp4_path = mp4_info.get("mp4_path", "") if isinstance(mp4_info, dict) else ""
+    ffmpeg_path = mp4_info.get("ffmpeg_path", "") if isinstance(mp4_info, dict) else ""
+    install_hint = mp4_info.get("install_hint", "") if isinstance(mp4_info, dict) else ""
 
     return f"""
     <section class="band detail-head">
@@ -270,6 +275,29 @@ def _render_project_detail(project_id: str) -> str:
       <label>미리보기 GIF</label>
       <p><code>{_escape(preview_gif or '아직 생성되지 않았습니다.')}</code></p>
       <table><thead><tr><th>#</th><th>PNG 프레임</th><th>길이</th></tr></thead><tbody>{preview_rows}</tbody></table>
+    </section>
+
+    <section class="band">
+      <h2>MP4 변환</h2>
+      <p class="muted">ffmpeg가 PATH에 있으면 PNG 프레임을 MP4로 변환합니다. 없으면 설치 안내 상태를 저장합니다.</p>
+      <form method="post" action="/mp4-status">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit" name="render" value="false">ffmpeg 확인</button>
+          <button class="secondary" type="submit" name="render" value="true">MP4 변환 시도</button>
+          <span class="muted">상태: {_escape(mp4_status)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>MP4 경로</label>
+          <p><code>{_escape(mp4_path or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>ffmpeg</label>
+          <p><code>{_escape(ffmpeg_path or install_hint or '아직 확인하지 않았습니다.')}</code></p>
+        </div>
+      </div>
     </section>
 
     <section class="band">
@@ -564,6 +592,13 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/render-preview":
                 project_id = params.get("project_id", [""])[0]
                 generate_preview_render(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/mp4-status":
+                project_id = params.get("project_id", [""])[0]
+                should_render = params.get("render", ["false"])[0] == "true"
+                check_or_render_mp4(project_id, should_render)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return
