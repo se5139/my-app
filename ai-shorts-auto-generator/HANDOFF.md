@@ -59,6 +59,21 @@ Verification:
 - State smoke test passed after setting `PYTHONPATH=src`.
 - Compliance and weekly planner smoke test passed after setting `PYTHONPATH=src`.
 
+## 2026-06-09 First Workflow Step
+
+Added the first local workflow after Git sync was repaired:
+
+- `src/ai_shorts/script_lab.py`: creates a local Korean script draft without paid API calls.
+- `src/ai_shorts/package_exporter.py`: exports a manual upload package with compliance report, title, description, tags, pinned comment, and asset/source notes.
+- `src/ai_shorts/cli.py`: adds `new-draft` and `plan-week` commands.
+
+Verification:
+
+- Python compile check passed.
+- Local script/planner smoke test passed.
+- `python -m ai_shorts.cli new-draft "퇴근 후 시간 관리" ...` created a test package with compliance status `pass`.
+- Test-generated `data/` and Python cache folders were removed after verification so sample artifacts are not committed.
+
 ## User Feature Direction Captured
 
 The user wants:

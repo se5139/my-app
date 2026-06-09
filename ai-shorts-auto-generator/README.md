@@ -57,8 +57,23 @@ See `docs/REFERENCE_REVIEW.md` and `docs/REBUILD_BLUEPRINT.md`.
 - `src/ai_shorts/state.py`: autosaved app/project state.
 - `src/ai_shorts/compliance.py`: legal, policy, originality, synthetic disclosure, and monetization risk gates.
 - `src/ai_shorts/weekly_planner.py`: weekly 2 to 3 draft planning based on topic insights.
+- `src/ai_shorts/script_lab.py`: local script draft creation without paid API calls.
+- `src/ai_shorts/package_exporter.py`: manual upload package export with compliance report.
+- `src/ai_shorts/cli.py`: local CLI for first workflow checks.
 
 The app must generate compliant draft packages first. Public upload automation is intentionally not enabled in phase 1.
+
+## Local CLI Smoke Workflow
+
+From this folder:
+
+```powershell
+$env:PYTHONPATH='src'
+python -m ai_shorts.cli new-draft "퇴근 후 시간 관리" --source-notes "인기 영상의 주제 흐름만 참고"
+python -m ai_shorts.cli plan-week --count 3 --topic "생활 팁" --topic "직장 공감" --topic "시간 절약"
+```
+
+This creates autosaved local project data under `data/projects/`.
 
 ## Local Git Setup For This PC
 

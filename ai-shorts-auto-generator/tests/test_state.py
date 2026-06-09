@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_shorts.state import AppState, ShortProject
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
+from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 
 
@@ -54,3 +55,10 @@ def test_weekly_plan_selects_highest_scoring_topics() -> None:
     )
     assert plan.slots[0].topic == "높은 점수"
     assert plan.target_count == 2
+
+
+def test_local_script_draft_has_transformation_note() -> None:
+    draft = create_local_script_draft("퇴근 후 시간 관리", "인기 영상들의 주제 흐름만 참고")
+    assert draft.title
+    assert draft.scenes
+    assert "복제하지 않고" in draft.transformation_note
