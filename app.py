@@ -928,6 +928,7 @@ def build_revised_phrase_variant(
     write_zip(zip_path, [*static_files, *zip_motion_files], variant_dir)
     validation = validate_output_package(variant_dir, request.product_mode, zip_path)
     optimization = optimization_summary(optimization_records)
+    animation_quality = build_animation_quality_report(variant_dir, spec, expression_plan)
     revised_quality = refined_quality
     (variant_dir / "revised_phrase_plan.json").write_text(
         json.dumps(revised_plan, ensure_ascii=False, indent=2),
@@ -953,6 +954,10 @@ def build_revised_phrase_variant(
         json.dumps(validation, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    (variant_dir / "revised_animation_quality_report.json").write_text(
+        json.dumps(animation_quality, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return {
         "enabled": True,
         "directory": str(variant_dir),
@@ -965,6 +970,8 @@ def build_revised_phrase_variant(
         "static_png_count": len(static_files),
         "animated_gif_count": len(animated_files),
         "animated_webp_count": len(webp_files),
+        "animation_quality_status": animation_quality["status"],
+        "animation_quality_report": "revised_animation_quality_report.json",
         "report_files": [
             "revised_phrase_plan.json",
             "revised_expression_plan.json",
@@ -972,6 +979,7 @@ def build_revised_phrase_variant(
             "revised_phrase_refinement_report.json",
             "revised_phrase_quality_report.json",
             "revised_validation_report.json",
+            "revised_animation_quality_report.json",
         ],
     }
 
@@ -3046,6 +3054,7 @@ def result_detail_page(name: str) -> str:
     phrase_quality = read_json_file(output_dir / "phrase_quality_report.json", {})
     replacements = read_json_file(output_dir / "phrase_replacement_suggestions.json", {})
     weak_cut_review = read_json_file(output_dir / "weak_cut_review.json", {})
+    animation_quality = read_json_file(output_dir / "animation_quality_report.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3104,6 +3113,12 @@ def result_detail_page(name: str) -> str:
         weak_cut_summary = {}
     weak_cut_status = weak_cut_summary.get("status", weak_cut_review.get("status", "미생성") if isinstance(weak_cut_review, dict) else "미생성")
     weak_cut_count = weak_cut_summary.get("review_count", weak_cut_review.get("review_count", 0) if isinstance(weak_cut_review, dict) else 0)
+    animation_summary = report.get("animation_quality", {})
+    if not isinstance(animation_summary, dict):
+        animation_summary = {}
+    animation_status = animation_summary.get("status", animation_quality.get("status", "미생성") if isinstance(animation_quality, dict) else "미생성")
+    animation_count = animation_summary.get("animated_count", animation_quality.get("animated_count", 0) if isinstance(animation_quality, dict) else 0)
+    animation_review_count = animation_summary.get("review_count", animation_quality.get("review_count", 0) if isinstance(animation_quality, dict) else 0)
 
     def file_href(path: Path) -> str:
         return "/" + str(path).replace("\\", "/")
@@ -3218,6 +3233,46 @@ def result_detail_page(name: str) -> str:
         ],
         "자동으로 우선 검토할 약한 컷이 없습니다.",
     )
+
+    def kb_text(value: object) -> str:
+        try:
+            size = int(value)
+        except (TypeError, ValueError):
+            return "0KB"
+        return f"{max(1, round(size / 1024))}KB" if size else "0KB"
+
+    def motion_file_line(label: str, info: object) -> str:
+        data = info if isinstance(info, dict) else {}
+        exists = "있음" if data.get("exists") else "없음"
+        dimensions = f"{data.get('width', 0)}x{data.get('height', 0)}"
+        frames = data.get("frame_count", 0)
+        size = kb_text(data.get("bytes", 0))
+        fmt = data.get("format", "")
+        return (
+            f"<div class='motion-file'><strong>{html.escape(label)}</strong>"
+            f"<span>{html.escape(str(exists))} · {html.escape(str(fmt or '-'))} · "
+            f"{html.escape(str(dimensions))} · {html.escape(str(frames))}프레임 · {html.escape(size)}</span></div>"
+        )
+
+    animation_slots = animation_quality.get("slots", []) if isinstance(animation_quality, dict) else []
+    animation_quality_html = (
+        "".join(
+            f"""
+            <div class="motion-card {tone(slot.get("status", ""))}">
+              <div class="review-title"><strong>#{int(slot.get("slot", 0)):02d} {html.escape(str(slot.get("phrase", "")))}</strong><span>{html.escape(str(slot.get("emotion", "")))}</span></div>
+              <p>{badge("상태", slot.get("status", ""))}</p>
+              <div class="motion-files">
+                {motion_file_line("제출 WebP", slot.get("webp", {}))}
+                {motion_file_line("GIF 소스", slot.get("gif_source", {}))}
+              </div>
+              {html_list([str(issue) for issue in slot.get("issues", [])[:4]], "이 컷의 WebP 제출 후보 이슈가 없습니다.")}
+            </div>
+            """
+            for slot in animation_slots
+            if isinstance(slot, dict)
+        )
+        or "<p>움직이는 이모티콘 컷이 없거나 애니메이션 품질 리포트가 아직 없습니다.</p>"
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3253,6 +3308,7 @@ def result_detail_page(name: str) -> str:
             link("원본 ZIP", report.get("zip", "")),
             link("수정판 ZIP", revised.get("zip", "")),
             link("증빙 ZIP", evidence.get("zip", "")),
+            link("WebP 품질 리포트", output_dir / "animation_quality_report.json"),
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -3299,6 +3355,15 @@ def result_detail_page(name: str) -> str:
     .direction-note {{ padding:14px 16px; border-radius:18px; background:#fff3d8; border:1px solid #f2cc80; color:#6b4c16; font-weight:800; }}
     .weak-cut {{ background:#fff8df; border-color:#e9c961; }}
     .weak-cut strong {{ color:#6c5311; }}
+    .motion-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; }}
+    .motion-card {{ border:1px solid #ead8bc; border-radius:18px; background:#fffaf0; padding:14px; }}
+    .motion-card.good {{ background:#edfff6; border-color:#8eddbf; }}
+    .motion-card.warn {{ background:#fff8df; border-color:#e9c961; }}
+    .motion-card.danger {{ background:#fff0ec; border-color:#e49a83; }}
+    .motion-files {{ display:grid; gap:8px; margin:8px 0; }}
+    .motion-file {{ border:1px solid #ead8bc; border-radius:14px; background:rgba(255,255,255,.72); padding:10px; }}
+    .motion-file strong, .motion-file span {{ display:block; }}
+    .motion-file span {{ color:#6f625f; font-size:13px; line-height:1.5; }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
@@ -3351,6 +3416,7 @@ def result_detail_page(name: str) -> str:
     <div class="metric {tone(revised_status)}"><span>수정본 품질</span><strong>{html.escape(str(revised_status))}</strong><p>{html.escape(str(revised_score))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
     <div class="metric neutral"><span>표정/손동작 다양성</span><strong>{html.escape(str(expression_diversity.get("variant_type_count", "")))}</strong><p>감정 {html.escape(str(expression_diversity.get("emotion_type_count", "")))}종 / 손동작 {html.escape(str(expression_diversity.get("gesture_type_count", "")))}종</p></div>
     <div class="metric {tone(weak_cut_status)}"><span>우선 검토 컷</span><strong>{html.escape(str(weak_cut_count))}</strong><p>{html.escape(str(weak_cut_status))} / weak_cut_review.json</p></div>
+    <div class="metric {tone(animation_status)}"><span>WebP 품질</span><strong>{html.escape(str(animation_status))}</strong><p>움직임 {html.escape(str(animation_count))}컷 / 검토 {html.escape(str(animation_review_count))}컷</p></div>
   </section>
   <section class="grid">
     <div class="metric"><span>자동 검사</span><strong>{html.escape(str(report.get("validation_status", "")))}</strong></div>
@@ -3360,7 +3426,7 @@ def result_detail_page(name: str) -> str:
   </section>
   <section class="panel">
     <h2>제출 ZIP/이미지 자동 검사</h2>
-    <p>ZIP 무결성, 내부 경로, 중복 파일명, JPG 포함 여부, PNG/GIF 개수와 형식을 확인합니다.</p>
+    <p>ZIP 무결성, 내부 경로, 중복 파일명, JPG 포함 여부, PNG/WebP 개수와 형식을 확인합니다. GIF는 움직임 확인용 소스로 별도 보관합니다.</p>
     <div class="grid">
       <div>
         <h2>검사 이슈</h2>
@@ -3380,6 +3446,13 @@ def result_detail_page(name: str) -> str:
     <h2>중복/약한 컷 자동 감지</h2>
     <p>문구 반복, 긴 문구, 자동 문구, 인접 컷의 표정/손동작 반복을 기준으로 먼저 볼 컷을 추립니다. 타 작품 유사성 판단은 아니므로 최종 제출 전 사람 검토가 필요합니다.</p>
     {weak_cut_html}
+  </section>
+  <section class="panel">
+    <h2>WebP 애니메이션 품질 검토</h2>
+    <p>제출 ZIP에 들어갈 WebP 후보를 기준으로 용량, 크기, 프레임 수를 확인하고 GIF는 움직임 확인용 소스로 함께 보여줍니다.</p>
+    <div class="motion-grid">
+      {animation_quality_html}
+    </div>
   </section>
   <section class="panel">
     <h2>스토어형 빠른 검토 그리드</h2>
@@ -4461,6 +4534,81 @@ def optimization_summary(records: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def animation_file_info(path: Path | None, expected_size: int, target_bytes: int, role: str) -> dict[str, object]:
+    info: dict[str, object] = {
+        "role": role,
+        "file": str(path or ""),
+        "exists": bool(path and path.is_file()),
+        "bytes": file_size(path) if path and path.is_file() else 0,
+        "target_bytes": target_bytes,
+        "target_met": bool(path and path.is_file() and file_size(path) <= target_bytes),
+        "width": 0,
+        "height": 0,
+        "frame_count": 0,
+        "format": "",
+        "issues": [],
+    }
+    issues: list[str] = []
+    if not path or not path.is_file():
+        issues.append("파일 없음")
+        info["issues"] = issues
+        return info
+    try:
+        with Image.open(path) as image:
+            info["format"] = str(image.format or "")
+            info["width"], info["height"] = image.size
+            info["frame_count"] = int(getattr(image, "n_frames", 1) or 1)
+            if image.size != (expected_size, expected_size):
+                issues.append(f"크기 {image.size[0]}x{image.size[1]} / 필요 {expected_size}x{expected_size}")
+    except Exception as exc:
+        issues.append(f"열기 실패: {type(exc).__name__}")
+    if int(info["bytes"]) > target_bytes:
+        issues.append(f"용량 초과: {int(info['bytes']) // 1024}KB / 목표 {target_bytes // 1024}KB")
+    info["issues"] = issues
+    return info
+
+
+def build_animation_quality_report(
+    output_dir: Path,
+    spec: dict[str, object],
+    expression_plan: list[dict[str, str]],
+) -> dict[str, object]:
+    expected_size = int(spec.get("canvas_px", CANVAS_SIZE))
+    target_bytes = int(spec.get("animated_target_bytes", ANIMATED_SUBMISSION_MAX_BYTES))
+    animated_items = [item for item in expression_plan if str(item.get("type", "")).startswith("animated")]
+    slots: list[dict[str, object]] = []
+    for index, item in enumerate(animated_items, start=1):
+        webp_rel = str(item.get("file", ""))
+        gif_rel = str(item.get("source_gif_file", ""))
+        webp_path = output_dir / webp_rel if webp_rel else None
+        gif_path = output_dir / gif_rel if gif_rel else None
+        webp_info = animation_file_info(webp_path, expected_size, target_bytes, "submit_webp")
+        gif_info = animation_file_info(gif_path, expected_size, target_bytes, "source_gif")
+        issues = [*webp_info.get("issues", []), *gif_info.get("issues", [])]
+        slots.append(
+            {
+                "slot": index,
+                "phrase": item.get("phrase", ""),
+                "emotion": item.get("emotion", ""),
+                "webp": webp_info,
+                "gif_source": gif_info,
+                "status": "pass" if not webp_info.get("issues") else "review",
+                "issues": issues,
+            }
+        )
+    review_count = sum(1 for item in slots if item.get("status") != "pass")
+    return {
+        "enabled": True,
+        "status": "pass" if review_count == 0 else "review",
+        "animated_count": len(slots),
+        "review_count": review_count,
+        "expected_canvas_px": expected_size,
+        "target_bytes": target_bytes,
+        "slots": slots,
+        "rule": "제출 후보는 WebP 기준으로 검사하고, GIF는 움직임 확인용 소스로만 보관합니다.",
+    }
+
+
 def build_submission_readiness_report(
     request: BuildRequest,
     spec: dict[str, object],
@@ -4879,12 +5027,14 @@ def build_creator_evidence_package(
         output_dir / "sketch_consistency_report.json",
         output_dir / "phrase_quality_report.json",
         output_dir / "phrase_replacement_suggestions.json",
+        output_dir / "animation_quality_report.json",
         output_dir / "weak_cut_review.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
         output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json",
         output_dir / "revised_phrase_variant" / "revised_phrase_quality_report.json",
+        output_dir / "revised_phrase_variant" / "revised_animation_quality_report.json",
     ]
     with zipfile.ZipFile(package_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for file_path in evidence_files:
@@ -5457,6 +5607,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
 
     expression_diversity = expression_diversity_summary(expression_plan)
     weak_cut_review = build_weak_cut_review(phrase_plan, expression_plan, phrase_quality)
+    animation_quality = build_animation_quality_report(output_dir, spec, expression_plan)
     zip_name = f"{guidance['zip_prefix']}_png_webp.zip" if animated_count else f"{guidance['zip_prefix']}_png.zip"
     zip_path = output_dir / zip_name
     optimization = optimization_summary(optimization_records)
@@ -5568,6 +5719,13 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "static_png_count": len(static_files),
         "animated_gif_count": len(animated_files),
         "animated_webp_count": len(webp_files),
+        "animation_quality": {
+            "enabled": True,
+            "status": animation_quality["status"],
+            "animated_count": animation_quality["animated_count"],
+            "review_count": animation_quality["review_count"],
+            "report_file": "animation_quality_report.json",
+        },
         "preview_jpg_count": len(preview_files),
         "zip": str(zip_path),
         "zip_purpose_label": guidance["purpose_label"],
@@ -5617,6 +5775,10 @@ def build_package(request: BuildRequest) -> dict[str, object]:
     )
     (output_dir / "expression_plan.json").write_text(
         json.dumps(expression_plan, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "animation_quality_report.json").write_text(
+        json.dumps(animation_quality, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     (output_dir / "weak_cut_review.json").write_text(
