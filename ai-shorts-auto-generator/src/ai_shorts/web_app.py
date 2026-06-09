@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
-from .state import read_json
+from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
 from .workflow import create_draft_package
 
@@ -108,6 +108,9 @@ def _render_project_detail(project_id: str) -> str:
 
     source_count = len(asset_notes.get("sources", [])) if isinstance(asset_notes, dict) else 0
     asset_count = len(asset_notes.get("assets", [])) if isinstance(asset_notes, dict) else 0
+    review = project.get("review", {}) if isinstance(project, dict) else {}
+    reviewer_note = review.get("reviewer_note", "") if isinstance(review, dict) else ""
+    reviewed_at = review.get("reviewed_at", "") if isinstance(review, dict) else ""
 
     return f"""
     <section class="band detail-head">
@@ -119,7 +122,25 @@ def _render_project_detail(project_id: str) -> str:
       <div>
         <label>패키지 위치</label>
         <p><code>{_escape(package_dir)}</code></p>
+        <label>검토 메모</label>
+        <p>{_escape(reviewer_note or '아직 검토 메모가 없습니다.')}</p>
+        <p class="muted">{_escape(reviewed_at)}</p>
       </div>
+    </section>
+
+    <section class="band">
+      <h2>검토 결정</h2>
+      <p class="muted">정책 리포트와 소스/자산 메모를 확인한 뒤 상태를 바꿉니다. 공개 업로드는 별도 최종 승인 전까지 자동 실행하지 않습니다.</p>
+      <form method="post" action="/review">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <label for="reviewer_note">검토 메모</label>
+        <textarea id="reviewer_note" name="reviewer_note" placeholder="예: 정책 리포트 확인, 외부 자산 없음, 수동 업로드 패키지 생성 가능">{_escape(reviewer_note)}</textarea>
+        <div class="actions">
+          <button type="submit" name="decision" value="approved_for_export">승인</button>
+          <button class="secondary" type="submit" name="decision" value="needs_revision">수정 필요</button>
+          <button class="warning" type="submit" name="decision" value="blocked">차단</button>
+        </div>
+      </form>
     </section>
 
     <section class="band">
@@ -276,6 +297,7 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
       cursor: pointer;
     }}
     button.secondary {{ background: var(--accent-2); }}
+    button.warning {{ background: #b42318; }}
     a {{ color: var(--accent-2); font-weight: 700; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .back {{ display: inline-block; margin-bottom: 10px; font-size: 14px; }}
@@ -403,6 +425,16 @@ class Handler(BaseHTTPRequestHandler):
                 topics = [line.strip() for line in topics_text.splitlines() if line.strip()]
                 plan = create_weekly_plan([TopicInsight(topic=topic) for topic in topics], count)
                 self._send(_render_page(plan=plan.to_dict()))
+                return
+            if self.path == "/review":
+                project_id = params.get("project_id", [""])[0]
+                decision = params.get("decision", ["needs_revision"])[0]
+                reviewer_note = params.get("reviewer_note", [""])[0]
+                if decision not in {"approved_for_export", "needs_revision", "blocked"}:
+                    raise ValueError("알 수 없는 검토 상태입니다.")
+                update_project_review(project_id, decision, reviewer_note)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
                 return
             self._send(_render_page(error="알 수 없는 요청입니다."), status=404)
         except Exception as exc:

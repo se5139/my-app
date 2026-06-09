@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_shorts.state import AppState, ShortProject
+from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
@@ -74,3 +74,11 @@ def test_web_app_renders_korean_workspace() -> None:
 def test_project_detail_handles_unknown_project() -> None:
     html = _render_project_detail("missing-project-id")
     assert "초안을 찾을 수 없습니다" in html
+
+
+def test_update_project_review_missing_project_raises() -> None:
+    try:
+        update_project_review("missing-project-id", "approved_for_export", "검토 완료")
+    except FileNotFoundError:
+        return
+    raise AssertionError("missing project should raise FileNotFoundError")

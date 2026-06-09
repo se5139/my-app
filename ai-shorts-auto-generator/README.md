@@ -103,6 +103,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - scene list
 - compliance report
 - manual upload package file paths
+- review decision controls: approve, needs revision, or block
 
 ## Local Git Setup For This PC
 

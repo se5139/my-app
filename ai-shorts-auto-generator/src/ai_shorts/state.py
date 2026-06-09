@@ -72,3 +72,30 @@ def create_project(title: str, source_notes: str = "") -> ShortProject:
     state.last_opened_project_id = project.id
     save_app_state(state)
     return project
+
+
+def update_project_review(project_id: str, status: str, reviewer_note: str = "") -> dict[str, Any]:
+    ensure_data_dirs()
+    project_path = PROJECTS_DIR / project_id / "project.json"
+    project_data = read_json(project_path, {})
+    if not project_data:
+        raise FileNotFoundError(f"Project not found: {project_id}")
+
+    timestamp = now_iso()
+    project_data["status"] = status
+    project_data["updated_at"] = timestamp
+    project_data["review"] = {
+        "status": status,
+        "reviewer_note": reviewer_note.strip(),
+        "reviewed_at": timestamp,
+    }
+    write_json(project_path, project_data)
+
+    state = load_app_state()
+    for item in state.projects:
+        if item.get("id") == project_id:
+            item["status"] = status
+            item["updated_at"] = timestamp
+            break
+    save_app_state(state)
+    return project_data

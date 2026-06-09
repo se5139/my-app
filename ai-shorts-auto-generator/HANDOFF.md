@@ -113,6 +113,25 @@ Next recommended work after this:
 - Add an edit/review action on the detail screen.
 - Then add actual video render placeholder generation.
 
+## 2026-06-09 Review Decision Step
+
+Added human review decisions on the saved draft detail screen:
+
+- `state.update_project_review(...)` updates `project.json` and `data/app_state.json`.
+- Detail screen can mark a draft as `approved_for_export`, `needs_revision`, or `blocked`.
+- Review note and timestamp are saved in the project record.
+- Public upload remains disabled; approval only means the manual export package is ready for the next step.
+
+Verification target:
+
+- Compile `state.py`, `web_app.py`, and tests.
+- End-to-end create a draft through the web form, submit review approval, and verify the detail page shows `approved_for_export`.
+
+Next recommended work:
+
+- Add simple edit controls for title, hook, narration, and scene captions.
+- Then add actual video render placeholder generation.
+
 ## User Feature Direction Captured
 
 The user wants:
