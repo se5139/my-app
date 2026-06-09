@@ -2540,6 +2540,123 @@ def read_json_file(path: Path, fallback: object) -> object:
         return fallback
 
 
+def write_json_file(path: Path, payload: object) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def build_review_action_plan(
+    output_dir: Path,
+    selected_slots: list[str],
+    focus: str,
+    reviewer_note: str,
+) -> dict[str, object]:
+    report = read_json_file(output_dir / "build_report.json", {})
+    weak_cut_review = read_json_file(output_dir / "weak_cut_review.json", {})
+    animation_quality = read_json_file(output_dir / "animation_quality_report.json", {})
+    replacements = read_json_file(output_dir / "phrase_replacement_suggestions.json", {})
+    phrase_plan = read_json_file(output_dir / "phrase_plan.json", [])
+    if not isinstance(report, dict):
+        report = {}
+    if not isinstance(weak_cut_review, dict):
+        weak_cut_review = {}
+    if not isinstance(animation_quality, dict):
+        animation_quality = {}
+    if not isinstance(replacements, dict):
+        replacements = {}
+    if not isinstance(phrase_plan, list):
+        phrase_plan = []
+
+    def clean_slot(value: object) -> str:
+        text = re.sub(r"[^0-9]", "", str(value or ""))
+        return text.lstrip("0") or text
+
+    selected = unique_keep_order([slot for slot in (clean_slot(item) for item in selected_slots) if slot])
+    weak_items = [item for item in weak_cut_review.get("priority_slots", []) if isinstance(item, dict)]
+    motion_items = [item for item in animation_quality.get("slots", []) if isinstance(item, dict)]
+    if not selected:
+        if focus == "motion":
+            selected = [
+                clean_slot(item.get("slot"))
+                for item in motion_items
+                if str(item.get("status", "")) != "pass"
+            ]
+        else:
+            selected = [clean_slot(item.get("slot")) for item in weak_items[:6]]
+    selected = [slot for slot in selected if slot]
+
+    replacement_by_slot = {
+        clean_slot(item.get("slot")): item
+        for item in replacements.get("suggestions", [])
+        if isinstance(item, dict)
+    }
+    phrase_by_slot = {
+        clean_slot(item.get("slot")): item
+        for item in phrase_plan
+        if isinstance(item, dict)
+    }
+    weak_by_slot = {clean_slot(item.get("slot")): item for item in weak_items}
+    motion_by_slot = {clean_slot(item.get("slot")): item for item in motion_items}
+
+    actions: list[dict[str, object]] = []
+    for slot in selected:
+        weak_item = weak_by_slot.get(slot, {})
+        motion_item = motion_by_slot.get(slot, {})
+        phrase_item = phrase_by_slot.get(slot, {})
+        replacement = replacement_by_slot.get(slot, {})
+        phrase = str(
+            weak_item.get("phrase")
+            or motion_item.get("phrase")
+            or phrase_item.get("phrase")
+            or ""
+        )
+        suggestions = []
+        if weak_item:
+            suggestions.extend(str(item) for item in weak_item.get("suggestions", [])[:3])
+        if replacement:
+            suggestions.append(f"대체 문구 후보: {replacement.get('recommended', '')}")
+        if motion_item:
+            webp = motion_item.get("webp", {}) if isinstance(motion_item.get("webp", {}), dict) else {}
+            motion_issues = motion_item.get("issues", [])
+            if motion_issues:
+                suggestions.extend(str(item) for item in motion_issues[:3])
+            else:
+                suggestions.append(
+                    f"WebP {bytes_label(int(webp.get('bytes', 0) or 0))}, {webp.get('frame_count', 0)}프레임 기준으로 움직임 자연스러움을 사람 검토하세요."
+                )
+        if not suggestions:
+            suggestions.append("표정, 손동작, 문구 길이를 함께 보며 다음 생성에서 차이를 더 키우세요.")
+        actions.append(
+            {
+                "slot": slot,
+                "phrase": phrase,
+                "task_type": "motion_review" if motion_item and focus == "motion" else "cut_revision",
+                "priority": "high" if int(weak_item.get("score", 100) or 100) < 70 else "normal",
+                "flags": weak_item.get("flags", []) if weak_item else [],
+                "suggestions": unique_keep_order(suggestions)[:5],
+            }
+        )
+
+    prompt_lines = [
+        f"#{item['slot']} {item.get('phrase', '')}: {' / '.join(str(s) for s in item.get('suggestions', [])[:2])}"
+        for item in actions
+    ]
+    plan = {
+        "enabled": True,
+        "created_at": time.strftime("%Y%m%d_%H%M%S"),
+        "character_name": report.get("character_name", ""),
+        "product_label": report.get("product_label", ""),
+        "focus": focus,
+        "selected_slots": selected,
+        "reviewer_note": reviewer_note.strip(),
+        "action_count": len(actions),
+        "actions": actions,
+        "next_build_prompt": prompt_lines,
+        "safe_scope": "검토 UX와 내부 품질 개선만 반영합니다. 참고 자료의 캐릭터, 문구, 구도, 그림체 복제는 금지합니다.",
+    }
+    write_json_file(output_dir / "review_action_plan.json", plan)
+    return plan
+
+
 def bytes_label(size: int) -> str:
     units = ["B", "KB", "MB", "GB"]
     value = float(max(size, 0))
@@ -3042,7 +3159,7 @@ def results_page() -> str:
 </html>"""
 
 
-def result_detail_page(name: str) -> str:
+def result_detail_page(name: str, message: str = "") -> str:
     output_dir = safe_output_dir_by_name(name)
     if output_dir is None:
         return page(error="결과 폴더를 찾을 수 없습니다.")
@@ -3055,6 +3172,7 @@ def result_detail_page(name: str) -> str:
     replacements = read_json_file(output_dir / "phrase_replacement_suggestions.json", {})
     weak_cut_review = read_json_file(output_dir / "weak_cut_review.json", {})
     animation_quality = read_json_file(output_dir / "animation_quality_report.json", {})
+    review_action_plan = read_json_file(output_dir / "review_action_plan.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3089,6 +3207,8 @@ def result_detail_page(name: str) -> str:
     def badge(label: str, value: object) -> str:
         text = str(value or "미확인")
         return f"<span class='badge {tone(text)}'>{html.escape(label)}: {html.escape(text)}</span>"
+
+    notice_html = f"<section class='panel notice'>{html.escape(message)}</section>" if message else ""
 
     submission = report.get("submission_readiness", {})
     if not isinstance(submission, dict):
@@ -3273,6 +3393,44 @@ def result_detail_page(name: str) -> str:
         )
         or "<p>움직이는 이모티콘 컷이 없거나 애니메이션 품질 리포트가 아직 없습니다.</p>"
     )
+    weak_action_inputs = "".join(
+        f"""
+        <label class="check-card">
+          <input type="checkbox" name="slots" value="{html.escape(str(item.get("slot", "")))}" checked>
+          <span>#{html.escape(str(item.get("slot", "")))} {html.escape(str(item.get("phrase", "")))}</span>
+          <small>{html.escape(", ".join(str(flag) for flag in item.get("flags", [])[:3]))}</small>
+        </label>
+        """
+        for item in weak_cut_items[:8]
+        if isinstance(item, dict)
+    )
+    motion_action_inputs = "".join(
+        f"""
+        <label class="check-card">
+          <input type="checkbox" name="slots" value="{html.escape(str(slot.get("slot", "")))}">
+          <span>#{html.escape(str(slot.get("slot", "")))} {html.escape(str(slot.get("phrase", "")))}</span>
+          <small>WebP {html.escape(str(slot.get("status", "")))} / GIF 소스 확인</small>
+        </label>
+        """
+        for slot in animation_slots
+        if isinstance(slot, dict)
+    )
+    review_action_items = review_action_plan.get("actions", []) if isinstance(review_action_plan, dict) else []
+    review_action_html = html_list(
+        [
+            f"#{item.get('slot', '')} {item.get('phrase', '')}: "
+            f"{' / '.join(str(suggestion) for suggestion in item.get('suggestions', [])[:2])}"
+            for item in review_action_items[:8]
+            if isinstance(item, dict)
+        ],
+        "아직 저장된 검토 후 수정 액션이 없습니다.",
+    )
+    review_action_summary = (
+        f"최근 저장 {html.escape(str(review_action_plan.get('created_at', '')))} / "
+        f"{html.escape(str(review_action_plan.get('action_count', 0)))}개 액션"
+        if isinstance(review_action_plan, dict) and review_action_plan
+        else "저장된 액션 없음"
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3309,6 +3467,7 @@ def result_detail_page(name: str) -> str:
             link("수정판 ZIP", revised.get("zip", "")),
             link("증빙 ZIP", evidence.get("zip", "")),
             link("WebP 품질 리포트", output_dir / "animation_quality_report.json"),
+            link("검토 액션 플랜", output_dir / "review_action_plan.json") if (output_dir / "review_action_plan.json").exists() else "",
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -3364,6 +3523,18 @@ def result_detail_page(name: str) -> str:
     .motion-file {{ border:1px solid #ead8bc; border-radius:14px; background:rgba(255,255,255,.72); padding:10px; }}
     .motion-file strong, .motion-file span {{ display:block; }}
     .motion-file span {{ color:#6f625f; font-size:13px; line-height:1.5; }}
+    .notice {{ border-color:#7fd8be; background:#e9fff4; font-weight:900; }}
+    .action-form {{ display:grid; gap:14px; }}
+    .check-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }}
+    .check-card {{ display:flex; gap:10px; align-items:flex-start; border:1px solid #ead8bc; border-radius:14px; background:#fffaf0; padding:10px; cursor:pointer; }}
+    .check-card input {{ margin-top:4px; }}
+    .check-card span, .check-card small {{ display:block; }}
+    .check-card span {{ color:#2d2424; font-weight:900; }}
+    .check-card small {{ color:#8a7b70; line-height:1.45; }}
+    textarea.review-note {{ width:100%; min-height:76px; box-sizing:border-box; border:1px solid #d8ccbc; border-radius:14px; padding:12px; font:inherit; resize:vertical; }}
+    .button-row {{ display:flex; flex-wrap:wrap; gap:10px; }}
+    button.action-button {{ border:0; border-radius:999px; padding:12px 16px; font-weight:900; background:#7fd8be; color:#1e3830; cursor:pointer; }}
+    button.action-button.secondary {{ background:#fff3d8; color:#6b4c16; border:1px solid #f2cc80; }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
@@ -3388,6 +3559,7 @@ def result_detail_page(name: str) -> str:
 </head>
 <body>
 <main>
+  {notice_html}
   <section class="panel hero">
     <h1>{html.escape(str(report.get("character_name", output_dir.name)))}</h1>
     <p>{html.escape(str(report.get("concept", "")))}</p>
@@ -3453,6 +3625,27 @@ def result_detail_page(name: str) -> str:
     <div class="motion-grid">
       {animation_quality_html}
     </div>
+  </section>
+  <section class="panel">
+    <h2>검토 후 수정 액션</h2>
+    <p>{review_action_summary}</p>
+    {review_action_html}
+    <form class="action-form" method="post" action="/review-action">
+      <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+      <h2>우선 수정할 컷</h2>
+      <div class="check-grid">
+        {weak_action_inputs or "<p>자동으로 선택할 약한 컷이 없습니다.</p>"}
+      </div>
+      <h2>움직임 검토 컷</h2>
+      <div class="check-grid">
+        {motion_action_inputs or "<p>움직이는 컷이 없습니다.</p>"}
+      </div>
+      <textarea class="review-note" name="reviewer_note" placeholder="다음 생성에 반영할 메모를 적어주세요. 예: 3번은 손동작을 크게, 7번은 문구를 더 짧게"></textarea>
+      <div class="button-row">
+        <button class="action-button" type="submit" name="focus" value="weak">선택 컷 수정 플랜 저장</button>
+        <button class="action-button secondary" type="submit" name="focus" value="motion">움직임 검토 플랜 저장</button>
+      </div>
+    </form>
   </section>
   <section class="panel">
     <h2>스토어형 빠른 검토 그리드</h2>
@@ -5029,6 +5222,7 @@ def build_creator_evidence_package(
         output_dir / "phrase_replacement_suggestions.json",
         output_dir / "animation_quality_report.json",
         output_dir / "weak_cut_review.json",
+        output_dir / "review_action_plan.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
@@ -6404,6 +6598,28 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api-usage/reset":
             reset_api_usage_ledger()
             self.respond(200, api_settings_page("API 사용량 원장을 초기화했습니다. 키와 환경변수는 변경하지 않았습니다."))
+            return
+        if self.path == "/review-action":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            output_dir = safe_output_dir_by_name(form_value(form, "name", ""))
+            if output_dir is None:
+                self.respond(404, page(error="결과 폴더를 찾을 수 없습니다."))
+                return
+            plan = build_review_action_plan(
+                output_dir,
+                form.get("slots", []),
+                form_value(form, "focus", "weak"),
+                form_value(form, "reviewer_note", ""),
+            )
+            self.respond(
+                200,
+                result_detail_page(
+                    output_dir.name,
+                    f"검토 후 수정 액션 {plan.get('action_count', 0)}개를 review_action_plan.json에 저장했습니다.",
+                ),
+            )
             return
         if self.path not in {"/build", "/research", "/learn"}:
             self.respond(404, page(error="Unknown route."))

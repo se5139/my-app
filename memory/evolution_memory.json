@@ -2,24 +2,6 @@
   "version": 1,
   "research_runs": [
     {
-      "created_at": "20260608_165658",
-      "source_count": 0,
-      "top_categories": [
-        "daily",
-        "simple"
-      ],
-      "source_quality_summary": {
-        "average_score": 0,
-        "platform_official_count": 0,
-        "legal_official_count": 0,
-        "trend_reference_count": 0,
-        "user_generated_count": 0,
-        "low_confidence_count": 0,
-        "recommended_sources": [],
-        "caution_sources": []
-      }
-    },
-    {
       "created_at": "20260608_165659",
       "source_count": 0,
       "top_categories": [
@@ -1886,6 +1868,25 @@
         "recommended_sources": [],
         "caution_sources": []
       }
+    },
+    {
+      "created_at": "20260609_221550",
+      "source_count": 0,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 0,
+        "platform_official_count": 0,
+        "legal_official_count": 0,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "recommended_sources": [],
+        "caution_sources": []
+      }
     }
   ],
   "learned_phrase_additions": [
@@ -1914,27 +1915,27 @@
   ],
   "last_compacted_at": "20260609_211559",
   "phrase_weights": {
-    "밥 먹자": 47,
-    "집 가자": 47,
-    "출근 완료": 47,
-    "그렇구나": 29,
-    "오잉?": 29,
-    "헉": 29,
-    "귀여워": 27,
-    "말랑해": 27,
-    "히히": 27
+    "밥 먹자": 48,
+    "집 가자": 48,
+    "출근 완료": 48,
+    "그렇구나": 30,
+    "오잉?": 30,
+    "헉": 30,
+    "귀여워": 28,
+    "말랑해": 28,
+    "히히": 28
   },
   "note_weights": {
-    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 47,
-    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 29,
-    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 27,
+    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 48,
+    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 30,
+    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 28,
     "작은 화면에서 보이도록 선을 굵게, 장식을 줄입니다.": 23,
     "움직임은 3단계 이상 차이가 보이되 프레임 수와 용량을 줄입니다.": 16
   },
   "category_weights": {
-    "daily": 47,
-    "reaction": 29,
-    "cute": 27,
+    "daily": 48,
+    "reaction": 30,
+    "cute": 28,
     "simple": 23,
     "motion": 16
   },
