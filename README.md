@@ -74,6 +74,13 @@ PULL_LATEST_BEFORE_WORK.bat
 SAVE_WORK_TO_GITHUB.bat
 ```
 
+앞으로 이 저장소에서 작업할 때는 항상 아래 상태를 유지합니다.
+
+- 작업 시작 전 `PULL_LATEST_BEFORE_WORK.bat`으로 최신 상태를 받습니다.
+- 작업 후 `VERIFY_PACKAGE.bat`으로 기본 검증을 통과시킵니다.
+- 변경사항은 커밋하고 `origin/main`에 push해서 다른 PC에서도 바로 이어갈 수 있게 합니다.
+- 로컬 전용 결과물, `.venv`, 캐시, API 키, 토큰은 저장소에 올리지 않습니다.
+
 ## 작업 상태 옮기기
 
 최근 결과물과 로컬 메모리를 함께 옮기려면 기존 PC에서:

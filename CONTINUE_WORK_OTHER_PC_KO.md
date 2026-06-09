@@ -116,6 +116,8 @@ git push origin main
 
 - 작업 시작 전 `PULL_LATEST_BEFORE_WORK.bat`을 먼저 실행합니다.
 - 작업 종료 후 `SAVE_WORK_TO_GITHUB.bat`으로 저장합니다.
+- Codex로 작업한 변경도 매번 검증, 커밋, push까지 끝내서 다른 PC에서 바로 이어갈 수 있게 유지합니다.
+- push 후 `git status --short --branch`에서 `main...origin/main`처럼 앞선 커밋이 없는 상태인지 확인합니다.
 - API 키, 비밀번호, 개인 토큰이 들어간 파일은 GitHub에 올리지 않습니다.
 - `outputs/`, `.venv/`, 캐시 폴더는 GitHub에 올리지 않습니다.
 - 제출용 결과물은 필요할 때 `EXPORT_SYNC_STATE.bat`으로 별도 이동합니다.
