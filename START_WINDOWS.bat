@@ -5,7 +5,15 @@ cd /d "%~dp0"
 set "APP_DIR=%~dp0"
 set "PORT=8520"
 set "PY_CMD="
-if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
+set "VENV_BROKEN="
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" --version >nul 2>nul
+  if errorlevel 1 (
+    set "VENV_BROKEN=1"
+  ) else (
+    set "PY_CMD=.venv\Scripts\python.exe"
+  )
+)
 
 title Kakao Emoticon v100 Launcher
 
@@ -18,6 +26,10 @@ echo [v100] PORT=%PORT%
 echo.
 
 if "%PY_CMD%"=="" (
+  if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PY_CMD=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+)
+
+if "%PY_CMD%"=="" (
   where py >nul 2>nul
   if not errorlevel 1 set "PY_CMD=py -3"
 )
@@ -25,10 +37,6 @@ if "%PY_CMD%"=="" (
 if "%PY_CMD%"=="" (
   where python >nul 2>nul
   if not errorlevel 1 set "PY_CMD=python"
-)
-
-if "%PY_CMD%"=="" (
-  if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PY_CMD=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 )
 
 if "%PY_CMD%"=="" (
@@ -46,6 +54,11 @@ if not exist "app.py" (
 )
 
 echo [v100] Python command: %PY_CMD%
+
+if "%VENV_BROKEN%"=="1" (
+  echo [v100] Existing Python environment is broken. Rebuilding...
+  rmdir /s /q .venv
+)
 
 if not exist ".venv\Scripts\python.exe" (
   echo [v100] Creating local Python environment...

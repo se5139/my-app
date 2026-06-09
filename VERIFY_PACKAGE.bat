@@ -3,7 +3,10 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "PY_CMD="
-if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" --version >nul 2>nul
+  if not errorlevel 1 set "PY_CMD=.venv\Scripts\python.exe"
+)
 
 title Kakao Emoticon v100 Package Check
 
@@ -15,6 +18,10 @@ echo [check] This verifies the extracted portable package.
 echo.
 
 if "%PY_CMD%"=="" (
+  if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PY_CMD=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+)
+
+if "%PY_CMD%"=="" (
   where py >nul 2>nul
   if not errorlevel 1 set "PY_CMD=py -3"
 )
@@ -22,10 +29,6 @@ if "%PY_CMD%"=="" (
 if "%PY_CMD%"=="" (
   where python >nul 2>nul
   if not errorlevel 1 set "PY_CMD=python"
-)
-
-if "%PY_CMD%"=="" (
-  if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PY_CMD=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 )
 
 if "%PY_CMD%"=="" (
