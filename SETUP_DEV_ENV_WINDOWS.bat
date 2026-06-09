@@ -7,17 +7,28 @@ echo  Setup development environment
 echo ============================================================
 echo.
 
+set "PY_CMD="
+
 where py >nul 2>nul
-if errorlevel 1 (
-  echo [ERROR] Python launcher was not found.
+if not errorlevel 1 set "PY_CMD=py -3"
+
+if "%PY_CMD%"=="" (
+  where python >nul 2>nul
+  if not errorlevel 1 set "PY_CMD=python"
+)
+
+if "%PY_CMD%"=="" (
+  echo [ERROR] Python was not found.
   echo Install Python 3.10+ and check "Add Python to PATH".
   pause
   exit /b 1
 )
 
+echo [INFO] Python command: %PY_CMD%
+
 if not exist ".venv\Scripts\python.exe" (
   echo [INFO] Creating .venv...
-  py -3 -m venv .venv
+  %PY_CMD% -m venv .venv
   if errorlevel 1 (
     echo [ERROR] Failed to create .venv.
     pause
