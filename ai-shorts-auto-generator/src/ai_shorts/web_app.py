@@ -15,6 +15,7 @@ from .workflow import (
     create_ffmpeg_setup_guide,
     generate_placeholder_render,
     generate_preview_render,
+    update_final_upload_checklist,
     update_render_export_review,
     update_draft_script,
 )
@@ -74,6 +75,7 @@ def _render_project_detail(project_id: str) -> str:
     preview_dir = PROJECTS_DIR / project_id / "renders" / "preview"
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export_status = read_json(package_dir / "render_export_status.json", {})
+    final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
@@ -177,6 +179,12 @@ def _render_project_detail(project_id: str) -> str:
     render_export_assets = render_export_status.get("assets", {}) if isinstance(render_export_status, dict) else {}
     render_export_blockers = render_export_status.get("blockers", []) if isinstance(render_export_status, dict) else []
     render_export_blocker_text = ", ".join(str(item) for item in render_export_blockers) if render_export_blockers else "없음"
+    final_upload_status = final_upload_checklist.get("status", "not_checked") if isinstance(final_upload_checklist, dict) else "not_checked"
+    final_upload_note = final_upload_checklist.get("reviewer_note", "") if isinstance(final_upload_checklist, dict) else ""
+    final_upload_missing = final_upload_checklist.get("missing", []) if isinstance(final_upload_checklist, dict) else []
+    final_upload_missing_text = ", ".join(str(item) for item in final_upload_missing) if final_upload_missing else "없음"
+    final_upload_next_step = final_upload_checklist.get("next_step", "최종 업로드 전 체크리스트를 실행하세요.") if isinstance(final_upload_checklist, dict) else "최종 업로드 전 체크리스트를 실행하세요."
+    final_upload_allowed = final_upload_checklist.get("manual_upload_allowed", False) if isinstance(final_upload_checklist, dict) else False
 
     return f"""
     <section class="band detail-head">
@@ -381,6 +389,27 @@ def _render_project_detail(project_id: str) -> str:
 
     <section class="band">
       <h2>업로드 패키지 파일</h2>
+      <form method="post" action="/final-upload-checklist">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <label for="final_upload_note">최종 체크 메모</label>
+        <textarea id="final_upload_note" name="reviewer_note" placeholder="예: MP4, 정책, 제목/설명/태그 확인">{_escape(final_upload_note)}</textarea>
+        <div class="actions">
+          <button type="submit">최종 업로드 체크리스트 실행</button>
+          <span class="muted">상태: {_escape(final_upload_status)} · 수동 업로드 허용: {_escape(final_upload_allowed)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>미충족 항목</label>
+          <p>{_escape(final_upload_missing_text)}</p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(final_upload_next_step)}</p>
+          <label>체크리스트 파일</label>
+          <p><code>{_escape(package_dir / 'final_upload_checklist.json')}</code></p>
+        </div>
+      </div>
       <table><thead><tr><th>파일</th><th>경로</th></tr></thead><tbody>{file_rows}</tbody></table>
     </section>
     """
@@ -688,6 +717,13 @@ class Handler(BaseHTTPRequestHandler):
                 if decision not in {"ready_for_upload_package", "needs_render_revision", "render_blocked"}:
                     raise ValueError("알 수 없는 렌더 승인 상태입니다.")
                 update_render_export_review(project_id, decision, reviewer_note)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/final-upload-checklist":
+                project_id = params.get("project_id", [""])[0]
+                reviewer_note = params.get("reviewer_note", [""])[0]
+                update_final_upload_checklist(project_id, reviewer_note)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

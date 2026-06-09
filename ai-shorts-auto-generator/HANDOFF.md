@@ -249,6 +249,24 @@ Next recommended work:
 
 - Add final package checklist that requires MP4 before actual manual YouTube upload.
 
+## 2026-06-10 Final Upload Checklist Step
+
+Added final manual upload checklist:
+
+- `src/ai_shorts/upload_checklist.py` writes `final_upload_checklist.json` under `exports/manual_upload_package`.
+- The checklist verifies human project approval, compliance pass, asset/source notes, render export readiness, MP4 presence, title, description, and tags.
+- Manual upload readiness stays blocked unless every gate passes.
+- Public upload automation remains disabled; this only prepares a human-reviewed manual upload handoff.
+
+Verification target:
+
+- Compile upload checklist, workflow, web, and tests.
+- End-to-end create draft, approve project review, generate render assets, approve render export, run final checklist, and verify it blocks without MP4.
+
+Next recommended work:
+
+- Add a dashboard summary that shows all projects and their current blocking gate.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

@@ -11,6 +11,7 @@ from .render_placeholder import create_render_placeholders
 from .render_preview import create_preview_media
 from .script_lab import create_local_script_draft, script_draft_from_dict
 from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
+from .upload_checklist import build_final_upload_checklist
 
 
 def create_draft_package(topic: str, source_notes: str = "") -> dict[str, Any]:
@@ -139,3 +140,28 @@ def update_render_export_review(project_id: str, decision: str, reviewer_note: s
             break
     save_app_state(state)
     return status
+
+
+def update_final_upload_checklist(project_id: str, reviewer_note: str = "") -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    project_path = project_dir / "project.json"
+    project_data = read_json(project_path, {})
+    if not project_data:
+        raise FileNotFoundError(f"Project not found: {project_id}")
+
+    checklist = build_final_upload_checklist(project_dir, reviewer_note)
+    timestamp = now_iso()
+    project_data["final_upload_checklist"] = checklist
+    project_data["updated_at"] = timestamp
+    project_data["status"] = checklist["status"]
+    write_json(project_path, project_data)
+
+    state = load_app_state()
+    for item in state.projects:
+        if item.get("id") == project_id:
+            item["status"] = checklist["status"]
+            item["updated_at"] = timestamp
+            break
+    save_app_state(state)
+    return checklist

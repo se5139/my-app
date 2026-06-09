@@ -10,6 +10,8 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
+from ai_shorts.state import write_json
+from ai_shorts.upload_checklist import build_final_upload_checklist
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -140,3 +142,22 @@ def test_render_export_status_records_review_assets(tmp_path) -> None:
     assert status["assets"]["gif_ready"] is True
     assert status["assets"]["mp4_ready"] is False
     assert (tmp_path / "exports" / "manual_upload_package" / "render_export_status.json").exists()
+
+
+def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
+    package_dir = tmp_path / "exports" / "manual_upload_package"
+    package_dir.mkdir(parents=True)
+    write_json(tmp_path / "project.json", {"review": {"status": "approved_for_export"}})
+    write_json(package_dir / "compliance_report.json", {"status": "pass"})
+    write_json(package_dir / "asset_source_notes.json", {"sources": [], "assets": []})
+    write_json(package_dir / "render_export_status.json", {"status": "ready_for_upload_package_mp4_pending"})
+    (package_dir / "title.txt").write_text("title", encoding="utf-8")
+    (package_dir / "description.txt").write_text("description", encoding="utf-8")
+    (package_dir / "tags.txt").write_text("tag", encoding="utf-8")
+
+    checklist = build_final_upload_checklist(tmp_path, "final check")
+    assert checklist["status"] == "blocked_before_upload"
+    assert checklist["manual_upload_allowed"] is False
+    assert "mp4_present" in checklist["missing"]
+    assert "render_export_ready" in checklist["missing"]
+    assert (package_dir / "final_upload_checklist.json").exists()
