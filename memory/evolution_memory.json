@@ -2,17 +2,6 @@
   "version": 1,
   "research_runs": [
     {
-      "created_at": "20260608_153748",
-      "source_count": 1,
-      "top_categories": [
-        "cute",
-        "simple",
-        "motion",
-        "daily",
-        "reaction"
-      ]
-    },
-    {
       "created_at": "20260608_154233",
       "source_count": 6,
       "top_categories": [
@@ -1368,6 +1357,128 @@
         "caution_sources": [],
         "rule": "공식/법률 출처는 정책 판단에 우선 사용하고, 영상/블로그/일반 웹은 추상 트렌드 참고용으로만 사용합니다."
       }
+    },
+    {
+      "created_at": "20260609_193445",
+      "source_count": 6,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 75.8,
+        "platform_official_count": 4,
+        "legal_official_count": 2,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "tier_counts": {
+          "platform_official": 4,
+          "legal_official": 2
+        },
+        "recommended_sources": [
+          {
+            "url": "https://www.copyright.or.kr/",
+            "title": "",
+            "score": 80,
+            "tier": "legal_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/guideline",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/pages/faq?from=with_faq",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/terms",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/webp-animator",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://www.mcst.go.kr/",
+            "title": "",
+            "score": 75,
+            "tier": "legal_official"
+          }
+        ],
+        "caution_sources": [],
+        "rule": "공식/법률 출처는 정책 판단에 우선 사용하고, 영상/블로그/일반 웹은 추상 트렌드 참고용으로만 사용합니다."
+      }
+    },
+    {
+      "created_at": "20260609_193634",
+      "source_count": 6,
+      "top_categories": [
+        "cute",
+        "daily",
+        "reaction"
+      ],
+      "source_quality_summary": {
+        "average_score": 75.8,
+        "platform_official_count": 4,
+        "legal_official_count": 2,
+        "trend_reference_count": 0,
+        "user_generated_count": 0,
+        "low_confidence_count": 0,
+        "tier_counts": {
+          "platform_official": 4,
+          "legal_official": 2
+        },
+        "recommended_sources": [
+          {
+            "url": "https://www.copyright.or.kr/",
+            "title": "",
+            "score": 80,
+            "tier": "legal_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/guideline",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/pages/faq?from=with_faq",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/terms",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://emoticonstudio.kakao.com/webp-animator",
+            "title": "",
+            "score": 75,
+            "tier": "platform_official"
+          },
+          {
+            "url": "https://www.mcst.go.kr/",
+            "title": "",
+            "score": 75,
+            "tier": "legal_official"
+          }
+        ],
+        "caution_sources": [],
+        "rule": "공식/법률 출처는 정책 판단에 우선 사용하고, 영상/블로그/일반 웹은 추상 트렌드 참고용으로만 사용합니다."
+      }
     }
   ],
   "learned_phrase_additions": [
@@ -1396,31 +1507,31 @@
   ],
   "last_compacted_at": "20260608_160019",
   "phrase_weights": {
-    "밥 먹자": 32,
-    "집 가자": 32,
-    "출근 완료": 32,
-    "그렇구나": 14,
-    "오잉?": 14,
-    "헉": 14,
-    "귀여워": 12,
-    "말랑해": 12,
-    "히히": 12
+    "밥 먹자": 34,
+    "집 가자": 34,
+    "출근 완료": 34,
+    "그렇구나": 16,
+    "오잉?": 16,
+    "헉": 16,
+    "귀여워": 14,
+    "말랑해": 14,
+    "히히": 14
   },
   "note_weights": {
-    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 32,
+    "매일 쓰기 쉬운 짧은 생활 문구를 늘립니다.": 34,
     "작은 화면에서 보이도록 선을 굵게, 장식을 줄입니다.": 23,
-    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 14,
-    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 12,
+    "표정 차이를 크게 만들고 상황 반응형 문구를 늘립니다.": 16,
+    "둥근 얼굴, 큰 여백, 작은 손발을 우선합니다.": 14,
     "움직임은 3단계 이상 차이가 보이되 프레임 수와 용량을 줄입니다.": 11
   },
   "category_weights": {
-    "daily": 32,
+    "daily": 34,
     "simple": 23,
-    "reaction": 14,
-    "cute": 12,
+    "reaction": 16,
+    "cute": 14,
     "motion": 11
   },
   "legal_guardrail_weights": {
-    "저작권/표절 관련 표현이 감지되었습니다. 특정 작품, 캐릭터, 문구를 복제하지 마세요.": 24
+    "저작권/표절 관련 표현이 감지되었습니다. 특정 작품, 캐릭터, 문구를 복제하지 마세요.": 26
   }
 }

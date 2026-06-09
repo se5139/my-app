@@ -3214,6 +3214,59 @@ def draw_centered_text(
     return y
 
 
+def fit_caption_font(
+    text: str,
+    max_width: int,
+    max_lines: int,
+    max_height: int,
+    start_size: int = 34,
+    min_size: int = 20,
+) -> ImageFont.ImageFont:
+    for size in range(start_size, min_size - 1, -2):
+        candidate = find_font(size, bold=True)
+        lines = wrap_text(text, candidate, max_width)
+        line_heights = [candidate.getbbox(line)[3] - candidate.getbbox(line)[1] for line in lines[:max_lines]]
+        total_height = sum(line_heights) + max(0, len(line_heights) - 1) * 4
+        if len(lines) <= max_lines and total_height <= max_height:
+            return candidate
+    return find_font(min_size, bold=True)
+
+
+def draw_caption_panel(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    top: int = 282,
+    bottom: int = 344,
+    max_width: int = 268,
+) -> None:
+    font = fit_caption_font(text, max_width=max_width, max_lines=2, max_height=bottom - top - 12)
+    lines = wrap_text(text, font, max_width)[:2]
+    line_heights = [font.getbbox(line)[3] - font.getbbox(line)[1] for line in lines]
+    total_height = sum(line_heights) + max(0, len(lines) - 1) * 4
+    panel_left = 45
+    panel_right = CANVAS_SIZE - 45
+    draw.rounded_rectangle(
+        (panel_left, top, panel_right, bottom),
+        radius=20,
+        fill="#fffdf7",
+        outline="#ead8bc",
+        width=2,
+    )
+    y = top + max(4, (bottom - top - total_height) // 2 - 1)
+    for line, height in zip(lines, line_heights):
+        box = font.getbbox(line)
+        width = box[2] - box[0]
+        draw.text(
+            (CANVAS_SIZE / 2 - width / 2, y - box[1]),
+            line,
+            font=font,
+            fill="#2d2424",
+            stroke_width=2,
+            stroke_fill="#ffffff",
+        )
+        y += height + 4
+
+
 def make_background(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str, index: int) -> None:
     draw.rounded_rectangle((12, 12, 348, 348), radius=48, fill="#fff8ea", outline=accent_color, width=5)
     for step in range(0, 360, 24):
@@ -3691,8 +3744,7 @@ def make_static_image(
         draw_character_style(draw, request.character_style, request.base_color, request.accent_color, index)
     expression_variant = draw_expression_overlay(draw, emotion, index)
     draw_emotion_effect(draw, emotion, index)
-    title_font = find_font(34, bold=True)
-    draw_centered_text(draw, phrase, title_font, 180, 292, "#2d2424", "#ffffff", 3)
+    draw_caption_panel(draw, phrase)
     return image, expression_variant
 
 
@@ -3718,8 +3770,7 @@ def make_animated_frames(
             draw_character_style(draw, request.character_style, request.base_color, request.accent_color, index, int(bounce))
         expression_variant = draw_expression_overlay(draw, emotion, index, int(bounce), frame_index)
         draw_emotion_effect(draw, emotion, index, frame_index)
-        title_font = find_font(32, bold=True)
-        draw_centered_text(draw, phrase, title_font, 180, 294, "#2d2424", "#ffffff", 3)
+        draw_caption_panel(draw, phrase)
         frames.append(image)
     return frames, expression_variant
 
