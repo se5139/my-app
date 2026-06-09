@@ -1,45 +1,16 @@
-# Kakao Emoticon Profit System
+# Kakao Emoticon Maker
 
-Python 중심의 로컬 PC 실행형 카카오톡 이모티콘 제작 보조 프로그램입니다.
+이 저장소는 카카오 이모티콘 제작 보조 프로그램입니다. 다른 PC에서도 이어서 실행하고 수정할 수 있도록 실행 파일, 검증 스크립트, 배포 ZIP, 동기화 도구를 함께 보관합니다.
 
-이 저장소는 이전에 다른 GitHub 주소에 저장했던 프로젝트 전체를 `https://github.com/se5139/my-app.git`로 옮겨 담은 저장소입니다. 루트 실행 흐름은 v90 간편 PNG/GIF 출력 hotfix 기준을 유지하고, 원격에 추가되어 있던 v92/v100 자료와 다른 PC 동기화 도구도 삭제하지 않고 함께 보존했습니다.
-
-## Windows 빠른 실행
-
-1. Python 3.10 이상을 설치합니다.
-2. Python 설치 화면에서 `Add Python to PATH`를 체크합니다.
-3. 저장소를 받습니다.
-
-```powershell
-git clone https://github.com/se5139/my-app.git
-cd my-app
-```
-
-4. 설치 배치 파일을 실행합니다.
-
-```powershell
-.\00_STEP_2_PORTABLE_INSTALL_NOW.bat
-```
-
-5. 프로그램을 시작합니다.
-
-```powershell
-.\00_STEP_3_START_PROGRAM.bat
-```
-
-또는 아래 파일로 시작할 수 있습니다.
-
-```powershell
-.\START_WINDOWS.bat
-```
-
-6. 브라우저에서 아래 주소를 엽니다.
+현재 기본 저장소:
 
 ```text
-http://127.0.0.1:8520
+https://github.com/se5139/my-app.git
 ```
 
-브라우저 자동 실행 없이 서버만 켜고 싶으면 아래 파일을 사용할 수 있습니다.
+## 다른 PC에서 바로 실행
+
+새 PC에서 Git과 Python 3.10 이상을 설치한 뒤 실행합니다.
 
 ```bat
 git clone https://github.com/se5139/my-app.git kakao-emoticon
@@ -47,114 +18,126 @@ cd kakao-emoticon
 START_HERE.bat
 ```
 
-## 설치 마법사
+`START_HERE.bat`은 먼저 `VERIFY_PACKAGE.bat`으로 필수 파일을 확인하고, 문제가 없으면 `START_WINDOWS.bat`으로 앱을 실행합니다.
 
-Windows PC에서는 v90 설치 파일을 사용할 수 있습니다.
+브라우저가 자동으로 열리지 않으면 아래 주소를 직접 엽니다.
 
 ```text
-release/KakaoEmoticonSetup_v90.exe
-release/KakaoEmoticonSetup_v90.exe.sha256.txt
+http://127.0.0.1:8520
 ```
 
-v100 portable ZIP과 동기화 패키지도 `release/`에 보존되어 있습니다.
+## ZIP으로 실행
+
+Git을 쓰기 어렵다면 GitHub의 `release` 폴더에서 최신 ZIP을 받습니다.
 
 ```text
 release/kakao_emoticon_v100_clean_latest.zip
-release/sync_state_export_latest.zip
 ```
 
-## 기본 메뉴
+압축 해제 후:
 
-프로그램은 v90 기준의 5개 큰 흐름을 유지합니다.
-
-1. 제작 시작, 정지형/움직이는형 미리보기
-2. 세트 구성, 32개/24개 품질 진화
-3. 검사, 자동보정, 제출 전 승인
-4. 반려 대응, 캡처/OCR, 재생성
-5. 최종 납품, 백업/리포트/재검사
-
-세부 기능과 고급 도구는 `_advanced_tools/` 아래에 보관되어 있습니다.
-
-## 제출 파일 기준
-
-- 정지형 최종 제출 파일: PNG 32개
-- 움직이는형 최종 제출 파일: GIF 24개
-- JPG는 확인용 preview 파일로만 사용합니다.
-- 제출용 ZIP에는 JPG가 들어가면 안 됩니다.
-- Windows 파일명 금지문자는 안전하게 치환합니다.
-- 특수문자 문구 원문은 화면, CSV, JSON에 보존합니다.
-- API 키 원문은 리포트, ZIP, CSV, JSON에 포함하지 않습니다.
-- 유료 API는 기본 OFF입니다.
-
-## 검증
-
-v90 핵심 검사는 아래 파일로 실행할 수 있습니다.
-
-```powershell
-.\47_V90_SIMPLE_PNG_GIF_OUTPUT_CHECK.bat
+```bat
+START_HERE.bat
 ```
 
-패키지 검증 도구가 있는 경우 아래 파일도 사용할 수 있습니다.
+자동 다운로드를 쓰려면:
 
-```powershell
-.\VERIFY_PACKAGE.bat
+```bat
+DOWNLOAD_LATEST_RELEASE.bat
 ```
 
-Codex 검증 산출물은 `release/` 폴더에 함께 보관했습니다.
+자세한 안내:
 
 ```text
-release/FINAL_VALIDATION_RESULT_KO.txt
-release/00_BEGINNER_RUN_GUIDE_KO.txt
-release/kakao_emoticon_profit_system_v90_simple_png_gif_output_hotfix_codex_fixed.zip
-release/kakao_emoticon_profit_system_v90_simple_png_gif_output_hotfix_codex_fixed.zip.sha256.txt
-```
-
-## 다른 PC 동기화 자료
-
-원격 저장소에 있던 다른 PC 실행/동기화 안내도 유지했습니다.
-
-```text
-CONTINUE_WORK_OTHER_PC_KO.md
 QUICK_START_OTHER_PC_KO.txt
 DOWNLOAD_LATEST_FROM_GITHUB_KO.md
-SYNC_STATE_GUIDE_KO.md
 TROUBLESHOOTING_KO.md
-RELEASE_NOTES_KO.md
 ```
 
-다른 PC에서 이어서 개발/수정 작업을 할 때는 아래 순서를 권장합니다.
+## 다른 PC에서 개발 이어가기
 
-```powershell
-.\SETUP_DEV_ENV_WINDOWS.bat
-.\PULL_LATEST_BEFORE_WORK.bat
-.\SAVE_WORK_TO_GITHUB.bat
+처음 받은 뒤 개발 환경을 점검하려면:
+
+```bat
+SETUP_DEV_ENV_WINDOWS.bat
 ```
 
-동기화 상태 내보내기/가져오기 파일도 포함되어 있습니다.
+작업 전 최신 내용 받기:
 
-```powershell
-.\EXPORT_SYNC_STATE.bat
-.\IMPORT_SYNC_STATE.bat
+```bat
+PULL_LATEST_BEFORE_WORK.bat
 ```
 
-## 사용자 데이터 보호
+작업 후 GitHub에 저장:
 
-이 프로젝트는 사용자 데이터를 삭제하거나 덮어쓰지 않는 방향을 우선합니다. 버전 정리 스크립트는 이전 버전 후보를 백업 대상으로 먼저 분류하고, 현재 버전과 상위 버전은 삭제 대상에서 제외하도록 설계되어 있습니다.
-
-## 보존된 이전/상위 버전 자료
-
-이전에 다른 저장소에 있던 자료는 병합 과정에서 보존했습니다.
-
-```text
-_review_v92/
-_deliverables_v92/
-KAKAO_SAFE_WORKFLOW.md
-RESEARCH_SOURCES.md
-memory/
+```bat
+SAVE_WORK_TO_GITHUB.bat
 ```
 
-v92 설치 파일은 아래 위치에 있습니다.
+## 작업 상태 옮기기
+
+최근 결과물과 로컬 메모리를 함께 옮기려면 기존 PC에서:
+
+```bat
+EXPORT_SYNC_STATE.bat
+```
+
+새 PC에서:
+
+```bat
+IMPORT_SYNC_STATE.bat
+```
+
+자세한 내용은 `SYNC_STATE_GUIDE_KO.md`를 확인합니다.
+
+## 주요 기능
+
+- 러프 스케치 기반 캐릭터 제작 보조
+- PNG/GIF 이모티콘 후보 생성
+- 카카오 제출 전 규격, 용량, 문구, 위험 표현 점검
+- 사람 제작 증빙 패키지 생성
+- 자료 URL/메모 기반 로컬 진화 메모리 저장
+- API 키 없이 기본 작동
+- API 사용 시 호출 한도 장부로 비용 방지
+- 최근 결과물, 갤러리, ZIP, 리포트 확인 페이지 제공
+
+주의: 이 프로그램은 제작 보조 도구입니다. 카카오 심사 통과, 수익, 법적 적합성을 보장하지 않습니다. 최종 제출 전 최신 카카오 공식 기준, 저작권, 상표권, 초상권, 생성형 AI 관련 정책을 직접 확인해야 합니다.
+
+## v92 설치파일 보관
+
+기존 v92 설치파일과 배포 ZIP은 `_deliverables_v92` 폴더에 보관되어 있습니다.
 
 ```text
 _deliverables_v92/KakaoEmoticonSetup_v92_DirectCreationHotfix.exe
+_deliverables_v92/kakao_emoticon_profit_system_v92_direct_creation_hotfix.zip
 ```
+
+v92 소스에서 직접 실행:
+
+```bat
+cd _review_v92
+START_WINDOWS.bat
+```
+
+v92 바탕화면 바로가기 복구:
+
+```bat
+cd _review_v92
+00_STEP_5_CREATE_DESKTOP_SHORTCUTS.bat
+```
+
+## 검증
+
+현재 폴더 검증:
+
+```bat
+VERIFY_PACKAGE.bat
+```
+
+Python으로 직접 검증:
+
+```bat
+python scripts\verify_package.py
+```
+
+검증이 통과하면 다른 PC에서 실행 가능한 기본 구성이 갖춰진 상태입니다.
