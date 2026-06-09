@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .workflow import create_draft_package, generate_placeholder_render, update_draft_script
+from .workflow import create_draft_package, generate_placeholder_render, generate_preview_render, update_draft_script
 
 
 HOST = "127.0.0.1"
@@ -63,9 +63,11 @@ def _render_project_detail(project_id: str) -> str:
     script = _read_project_file(project_id, "script_draft.json", {})
     package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
     render_dir = PROJECTS_DIR / project_id / "renders" / "placeholder"
+    preview_dir = PROJECTS_DIR / project_id / "renders" / "preview"
     compliance = read_json(package_dir / "compliance_report.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
+    preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
 
     scenes = "".join(
         "<tr>"
@@ -133,6 +135,17 @@ def _render_project_detail(project_id: str) -> str:
         render_rows = '<tr><td colspan="4" class="muted">아직 렌더 placeholder가 없습니다.</td></tr>'
     timeline_html = render_plan.get("timeline_html", "") if isinstance(render_plan, dict) else ""
     render_manifest = render_plan.get("render_manifest", "") if isinstance(render_plan, dict) else ""
+    preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
+    preview_rows = "".join(
+        "<tr>"
+        f"<td>{int(frame.get('scene_no', idx + 1))}</td>"
+        f"<td><code>{_escape(frame.get('frame_png'))}</code></td>"
+        f"<td>{_escape(frame.get('duration_ms'))}ms</td>"
+        "</tr>"
+        for idx, frame in enumerate(preview_manifest.get("frames", []))
+    )
+    if not preview_rows:
+        preview_rows = '<tr><td colspan="3" class="muted">아직 미리보기 프레임이 없습니다.</td></tr>'
 
     return f"""
     <section class="band detail-head">
@@ -242,6 +255,21 @@ def _render_project_detail(project_id: str) -> str:
         </div>
       </div>
       <table><thead><tr><th>#</th><th>자막</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
+    </section>
+
+    <section class="band">
+      <h2>렌더 미리보기</h2>
+      <p class="muted">MP4 전 단계로 PNG 프레임과 애니메이션 GIF를 생성합니다. 현재 환경에는 ffmpeg가 없어 MP4 변환은 다음 단계입니다.</p>
+      <form method="post" action="/render-preview">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">GIF 미리보기 생성</button>
+          <span class="muted">상태: {_escape(preview_manifest.get('status', 'not_created') if isinstance(preview_manifest, dict) else 'not_created')}</span>
+        </div>
+      </form>
+      <label>미리보기 GIF</label>
+      <p><code>{_escape(preview_gif or '아직 생성되지 않았습니다.')}</code></p>
+      <table><thead><tr><th>#</th><th>PNG 프레임</th><th>길이</th></tr></thead><tbody>{preview_rows}</tbody></table>
     </section>
 
     <section class="band">
@@ -530,6 +558,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/render-placeholder":
                 project_id = params.get("project_id", [""])[0]
                 generate_placeholder_render(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/render-preview":
+                project_id = params.get("project_id", [""])[0]
+                generate_preview_render(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

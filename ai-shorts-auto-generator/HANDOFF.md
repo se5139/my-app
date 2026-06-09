@@ -169,6 +169,25 @@ Next recommended work:
 - Add simple MP4 render from the generated SVG/placeholders.
 - Then add render review and export status.
 
+## 2026-06-09 Render Preview Step
+
+Added a dependency-light render preview package:
+
+- `src/ai_shorts/render_preview.py` creates scene PNG frames and `preview.gif` using Pillow.
+- `preview_manifest.json` records GIF path, frame paths, dimensions, and MP4 availability status.
+- Detail screen now has "GIF 미리보기 생성" and shows preview artifact paths.
+- MP4 remains unavailable in the current bundled environment because `ffmpeg`, `moviepy`, and `imageio` are not present.
+
+Verification target:
+
+- Compile preview, workflow, web, and tests.
+- Generate a draft, placeholder render, preview render, and verify `preview.gif`, frame PNGs, and `preview_manifest.json`.
+
+Next recommended work:
+
+- Add optional ffmpeg discovery/install guidance and MP4 conversion when ffmpeg is available.
+- Then add render approval/export status.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

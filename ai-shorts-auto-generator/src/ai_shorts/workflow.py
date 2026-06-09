@@ -6,6 +6,7 @@ from typing import Any
 from .package_exporter import export_manual_upload_package
 from .paths import PROJECTS_DIR, ensure_data_dirs
 from .render_placeholder import create_render_placeholders
+from .render_preview import create_preview_media
 from .script_lab import create_local_script_draft, script_draft_from_dict
 from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
 
@@ -80,3 +81,13 @@ def generate_placeholder_render(project_id: str) -> dict[str, Any]:
         raise FileNotFoundError(f"Script draft not found: {project_id}")
     script = script_draft_from_dict(script_data)
     return create_render_placeholders(project_id, script, project_dir)
+
+
+def generate_preview_render(project_id: str) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    if not (project_dir / "renders" / "placeholder" / "render_plan.json").exists():
+        generate_placeholder_render(project_id)
+    return create_preview_media(project_id, project_dir)
