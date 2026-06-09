@@ -4,7 +4,7 @@ import html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json
@@ -25,6 +25,16 @@ def _app_state() -> dict:
     return read_json(APP_STATE_PATH, {"projects": [], "last_opened_project_id": None})
 
 
+def _known_project_ids() -> set[str]:
+    return {str(item.get("id", "")) for item in _app_state().get("projects", [])}
+
+
+def _read_project_file(project_id: str, filename: str, default: object) -> object:
+    if project_id not in _known_project_ids():
+        return default
+    return read_json(PROJECTS_DIR / project_id / filename, default)
+
+
 def _latest_project_summary(limit: int = 8) -> str:
     state = _app_state()
     projects = list(reversed(state.get("projects", [])))[:limit]
@@ -36,7 +46,7 @@ def _latest_project_summary(limit: int = 8) -> str:
         package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
         rows.append(
             "<tr>"
-            f"<td>{_escape(item.get('title'))}</td>"
+            f"<td><a href=\"/project?id={_escape(project_id)}\">{_escape(item.get('title'))}</a></td>"
             f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
             f"<td><code>{_escape(project_id[:8])}</code></td>"
             f"<td><code>{_escape(package_dir)}</code></td>"
@@ -45,7 +55,117 @@ def _latest_project_summary(limit: int = 8) -> str:
     return "<table><thead><tr><th>초안</th><th>상태</th><th>ID</th><th>패키지 위치</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
 
 
-def _render_page(result: dict | None = None, plan: dict | None = None, error: str = "") -> bytes:
+def _render_project_detail(project_id: str) -> str:
+    if project_id not in _known_project_ids():
+        return '<section class="band"><h2>초안을 찾을 수 없습니다</h2><p class="muted">저장된 프로젝트 목록에 없는 ID입니다.</p></section>'
+
+    project = _read_project_file(project_id, "project.json", {})
+    script = _read_project_file(project_id, "script_draft.json", {})
+    package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
+    compliance = read_json(package_dir / "compliance_report.json", {})
+    asset_notes = read_json(package_dir / "asset_source_notes.json", {})
+
+    scenes = "".join(
+        "<tr>"
+        f"<td>{int(scene.get('order', idx + 1))}</td>"
+        f"<td>{_escape(scene.get('caption'))}</td>"
+        f"<td>{_escape(scene.get('narration'))}</td>"
+        f"<td>{_escape(scene.get('visual_direction'))}</td>"
+        "</tr>"
+        for idx, scene in enumerate(script.get("scenes", []))
+    )
+    if not scenes:
+        scenes = '<tr><td colspan="4" class="muted">저장된 장면이 없습니다.</td></tr>'
+
+    findings = "".join(
+        "<li>"
+        f"<strong>{_escape(finding.get('severity'))}</strong> "
+        f"{_escape(finding.get('message'))}<br>"
+        f"<span>{_escape(finding.get('recommendation'))}</span>"
+        "</li>"
+        for finding in compliance.get("findings", [])
+    )
+    if not findings:
+        findings = '<li><strong>pass</strong> 차단 또는 검토 항목이 없습니다.</li>'
+
+    files = [
+        "script.json",
+        "compliance_report.json",
+        "asset_source_notes.json",
+        "title.txt",
+        "description.txt",
+        "tags.txt",
+        "pinned_comment.txt",
+        "README_UPLOAD_REVIEW.txt",
+    ]
+    file_rows = "".join(
+        "<tr>"
+        f"<td>{_escape(name)}</td>"
+        f"<td><code>{_escape(package_dir / name)}</code></td>"
+        "</tr>"
+        for name in files
+    )
+
+    source_count = len(asset_notes.get("sources", [])) if isinstance(asset_notes, dict) else 0
+    asset_count = len(asset_notes.get("assets", [])) if isinstance(asset_notes, dict) else 0
+
+    return f"""
+    <section class="band detail-head">
+      <div>
+        <a class="back" href="/">← 작업 화면으로</a>
+        <h2>{_escape(project.get('title'))}</h2>
+        <p class="muted">ID <code>{_escape(project_id)}</code> · 상태 <span class="status">{_escape(project.get('status'))}</span></p>
+      </div>
+      <div>
+        <label>패키지 위치</label>
+        <p><code>{_escape(package_dir)}</code></p>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>대본 요약</h2>
+      <div class="grid two">
+        <div>
+          <label>제목</label>
+          <p class="big">{_escape(script.get('title'))}</p>
+          <label>후킹</label>
+          <p>{_escape(script.get('hook'))}</p>
+          <label>썸네일 문구</label>
+          <p>{_escape(script.get('thumbnail_text'))}</p>
+        </div>
+        <div>
+          <label>창작 변형 메모</label>
+          <p>{_escape(script.get('transformation_note'))}</p>
+          <label>참고/수집 메모</label>
+          <p>{_escape(project.get('source_notes'))}</p>
+        </div>
+      </div>
+      <label>전체 내레이션</label>
+      <p class="narration">{_escape(script.get('narration'))}</p>
+    </section>
+
+    <section class="band">
+      <h2>장면 구성</h2>
+      <table>
+        <thead><tr><th>#</th><th>자막</th><th>내레이션</th><th>비주얼 방향</th></tr></thead>
+        <tbody>{scenes}</tbody>
+      </table>
+    </section>
+
+    <section class="band">
+      <h2>정책 검사 리포트</h2>
+      <p>상태 <span class="status">{_escape(compliance.get('status', 'unknown'))}</span> · 소스 {source_count}개 · 자산 {asset_count}개</p>
+      <ol class="scenes">{findings}</ol>
+    </section>
+
+    <section class="band">
+      <h2>업로드 패키지 파일</h2>
+      <table><thead><tr><th>파일</th><th>경로</th></tr></thead><tbody>{file_rows}</tbody></table>
+    </section>
+    """
+
+
+def _render_page(result: dict | None = None, plan: dict | None = None, error: str = "", detail_html: str = "") -> bytes:
     result_html = ""
     if result:
         script = result.get("script", {})
@@ -156,6 +276,9 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
       cursor: pointer;
     }}
     button.secondary {{ background: var(--accent-2); }}
+    a {{ color: var(--accent-2); font-weight: 700; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .back {{ display: inline-block; margin-bottom: 10px; font-size: 14px; }}
     .actions {{ display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }}
     .muted {{ color: var(--muted); font-size: 14px; }}
     .big {{ font-size: 18px; font-weight: 700; }}
@@ -181,12 +304,15 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
     .scenes {{ margin: 8px 0 0; padding-left: 22px; }}
     .scenes li {{ margin: 10px 0; }}
     .scenes span {{ color: var(--muted); }}
+    .detail-head {{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr); gap: 18px; }}
+    .narration {{ white-space: pre-wrap; line-height: 1.65; }}
     .empty {{ color: var(--muted); padding: 10px 0; }}
     .error {{ border: 1px solid #fecdca; color: var(--danger); background: #fff3f1; padding: 12px; border-radius: 6px; margin-bottom: 16px; }}
     @media (max-width: 760px) {{
       header {{ padding: 18px; }}
       main {{ padding: 14px; }}
       .two {{ grid-template-columns: 1fr; }}
+      .detail-head {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -197,6 +323,7 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
   </header>
   <main>
     {error_html}
+    {detail_html}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
       <form method="post" action="/create">
@@ -252,6 +379,12 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/project":
+            query = parse_qs(parsed.query)
+            detail_html = _render_project_detail(query.get("id", [""])[0])
+            self._send(_render_page(detail_html=detail_html))
+            return
         self._send(_render_page())
 
     def do_POST(self) -> None:

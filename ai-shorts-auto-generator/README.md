@@ -97,6 +97,13 @@ On Windows, you can also run:
 START_WEB_APP.bat
 ```
 
+Saved drafts appear in the recent drafts table. Click a draft title to open its detail screen with:
+
+- script summary
+- scene list
+- compliance report
+- manual upload package file paths
+
 ## Local Git Setup For This PC
 
 Git is required before local commits and pushes can run.

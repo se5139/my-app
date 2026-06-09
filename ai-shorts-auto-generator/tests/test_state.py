@@ -4,7 +4,7 @@ from ai_shorts.state import AppState, ShortProject
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
-from ai_shorts.web_app import _render_page
+from ai_shorts.web_app import _render_page, _render_project_detail
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -69,3 +69,8 @@ def test_web_app_renders_korean_workspace() -> None:
     html = _render_page().decode("utf-8")
     assert "새 쇼츠 초안" in html
     assert "주간 2~3개 계획" in html
+
+
+def test_project_detail_handles_unknown_project() -> None:
+    html = _render_project_detail("missing-project-id")
+    assert "초안을 찾을 수 없습니다" in html

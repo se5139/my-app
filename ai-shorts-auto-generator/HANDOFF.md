@@ -94,6 +94,25 @@ Next recommended work:
 - Add a project detail screen that opens saved drafts and shows compliance report contents.
 - Then add actual video render placeholder generation.
 
+## 2026-06-09 Project Detail Step
+
+Added saved draft detail viewing:
+
+- Recent drafts now link to `/project?id=<project_id>`.
+- The detail screen reads `project.json`, `script_draft.json`, `compliance_report.json`, and package metadata.
+- It shows script summary, scene list, compliance findings, source/asset counts, and upload package file paths.
+
+Verification target:
+
+- Compile `web_app.py`.
+- Render unknown-project fallback.
+- End-to-end create a draft through the web form and load its detail page.
+
+Next recommended work after this:
+
+- Add an edit/review action on the detail screen.
+- Then add actual video render placeholder generation.
+
 ## User Feature Direction Captured
 
 The user wants:
