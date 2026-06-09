@@ -8,7 +8,7 @@ from ai_shorts.web_app import _render_page, _render_project_detail
 from ai_shorts.script_lab import script_draft_from_dict
 from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
-from ai_shorts.ffmpeg_renderer import mp4_status
+from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -119,3 +119,11 @@ def test_mp4_status_records_ffmpeg_state(tmp_path) -> None:
     status = mp4_status(tmp_path)
     assert "ffmpeg_available" in status
     assert (tmp_path / "renders" / "preview" / "mp4_status.json").exists()
+
+
+def test_ffmpeg_setup_guide_creates_json_and_markdown(tmp_path) -> None:
+    guide = ffmpeg_setup_guide(tmp_path)
+    assert guide["status"] == "guide_ready"
+    assert "winget" in guide["recommended_windows_command"]
+    assert (tmp_path / "renders" / "preview" / "ffmpeg_setup_guide.json").exists()
+    assert (tmp_path / "renders" / "preview" / "ffmpeg_setup_guide.md").exists()

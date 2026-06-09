@@ -9,7 +9,14 @@ from urllib.parse import parse_qs, urlparse
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .workflow import check_or_render_mp4, create_draft_package, generate_placeholder_render, generate_preview_render, update_draft_script
+from .workflow import (
+    check_or_render_mp4,
+    create_draft_package,
+    create_ffmpeg_setup_guide,
+    generate_placeholder_render,
+    generate_preview_render,
+    update_draft_script,
+)
 
 
 HOST = "127.0.0.1"
@@ -69,6 +76,7 @@ def _render_project_detail(project_id: str) -> str:
     render_plan = read_json(render_dir / "render_plan.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_info = read_json(preview_dir / "mp4_status.json", {})
+    ffmpeg_guide = read_json(preview_dir / "ffmpeg_setup_guide.json", {})
 
     scenes = "".join(
         "<tr>"
@@ -151,6 +159,15 @@ def _render_project_detail(project_id: str) -> str:
     mp4_path = mp4_info.get("mp4_path", "") if isinstance(mp4_info, dict) else ""
     ffmpeg_path = mp4_info.get("ffmpeg_path", "") if isinstance(mp4_info, dict) else ""
     install_hint = mp4_info.get("install_hint", "") if isinstance(mp4_info, dict) else ""
+    setup_guide_path = ""
+    setup_command = ""
+    verify_command = ""
+    if isinstance(ffmpeg_guide, dict):
+        setup_guide_path = str(ffmpeg_guide.get("markdown_path") or ffmpeg_guide.get("json_path") or "")
+        setup_command = str(ffmpeg_guide.get("recommended_windows_command") or "")
+        verify_command = str(ffmpeg_guide.get("verify_command") or "")
+    if not setup_guide_path and isinstance(mp4_info, dict):
+        setup_guide_path = str(mp4_info.get("setup_guide_path") or "")
 
     return f"""
     <section class="band detail-head">
@@ -296,6 +313,23 @@ def _render_project_detail(project_id: str) -> str:
         <div>
           <label>ffmpeg</label>
           <p><code>{_escape(ffmpeg_path or install_hint or '아직 확인하지 않았습니다.')}</code></p>
+        </div>
+      </div>
+      <form method="post" action="/ffmpeg-guide">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">ffmpeg 설치 안내 생성</button>
+          <span class="muted">안내: <code>{_escape(setup_guide_path or '아직 생성되지 않았습니다.')}</code></span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>설치 명령</label>
+          <p><code>{_escape(setup_command or 'winget install --id Gyan.FFmpeg --exact')}</code></p>
+        </div>
+        <div>
+          <label>설치 확인</label>
+          <p><code>{_escape(verify_command or 'ffmpeg -version')}</code></p>
         </div>
       </div>
     </section>
@@ -599,6 +633,12 @@ class Handler(BaseHTTPRequestHandler):
                 project_id = params.get("project_id", [""])[0]
                 should_render = params.get("render", ["false"])[0] == "true"
                 check_or_render_mp4(project_id, should_render)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/ffmpeg-guide":
+                project_id = params.get("project_id", [""])[0]
+                create_ffmpeg_setup_guide(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

@@ -12,6 +12,60 @@ def find_ffmpeg() -> str | None:
     return shutil.which("ffmpeg")
 
 
+def ffmpeg_setup_guide(project_dir: Path) -> dict[str, Any]:
+    preview_dir = project_dir / "renders" / "preview"
+    guide = {
+        "status": "guide_ready",
+        "purpose": "Enable MP4 rendering from generated PNG preview frames.",
+        "recommended_windows_command": "winget install --id Gyan.FFmpeg --exact",
+        "manual_download_url": "https://www.ffmpeg.org/download.html",
+        "windows_builds_url": "https://www.gyan.dev/ffmpeg/builds/",
+        "verify_command": "ffmpeg -version",
+        "after_install": [
+            "Close and reopen PowerShell or this web app launcher.",
+            "Run ffmpeg -version to confirm PATH can find ffmpeg.exe.",
+            "Open the project detail screen and press ffmpeg 확인.",
+            "Press MP4 변환 시도 after the status becomes ready.",
+        ],
+        "notes": [
+            "The app does not auto-install system tools without explicit user action.",
+            "FFmpeg provides the core command-line encoder; Windows builds are linked from the FFmpeg download page.",
+            "WinGet is the standard Windows package-manager command on supported Windows systems.",
+        ],
+    }
+    write_json(preview_dir / "ffmpeg_setup_guide.json", guide)
+    markdown = "\n".join(
+        [
+            "# FFmpeg Setup Guide",
+            "",
+            "MP4 rendering needs `ffmpeg.exe` available in PATH.",
+            "",
+            "## Recommended Windows Install",
+            "",
+            "```powershell",
+            guide["recommended_windows_command"],
+            "```",
+            "",
+            "## Manual Download",
+            "",
+            f"- FFmpeg download page: {guide['manual_download_url']}",
+            f"- Windows builds: {guide['windows_builds_url']}",
+            "",
+            "## Verify",
+            "",
+            "```powershell",
+            guide["verify_command"],
+            "```",
+            "",
+            "After installing, restart the app launcher and press `ffmpeg 확인` again.",
+        ]
+    )
+    guide["markdown_path"] = str(preview_dir / "ffmpeg_setup_guide.md")
+    (preview_dir / "ffmpeg_setup_guide.md").write_text(markdown, encoding="utf-8")
+    write_json(preview_dir / "ffmpeg_setup_guide.json", guide)
+    return guide
+
+
 def mp4_status(project_dir: Path) -> dict[str, Any]:
     preview_dir = project_dir / "renders" / "preview"
     ffmpeg_path = find_ffmpeg()
@@ -21,7 +75,10 @@ def mp4_status(project_dir: Path) -> dict[str, Any]:
         "mp4_path": str(preview_dir / "preview.mp4"),
         "status": "ready" if ffmpeg_path else "ffmpeg_missing",
         "install_hint": "Install ffmpeg and make sure ffmpeg.exe is available in PATH.",
+        "setup_guide_path": str(preview_dir / "ffmpeg_setup_guide.json"),
     }
+    if not ffmpeg_path:
+        ffmpeg_setup_guide(project_dir)
     write_json(preview_dir / "mp4_status.json", status)
     return status
 

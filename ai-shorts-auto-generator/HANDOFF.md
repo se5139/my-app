@@ -213,6 +213,24 @@ Next recommended work:
 - Add a guided ffmpeg install/download option if the user approves.
 - Or add render approval/export status using GIF/timeline assets while MP4 waits.
 
+## 2026-06-10 FFmpeg Setup Guide Step
+
+Added guided ffmpeg setup output:
+
+- `ffmpeg_setup_guide.json` and `ffmpeg_setup_guide.md` are generated under each project's preview render folder.
+- The guide records a Windows WinGet install command, official/manual download links, and `ffmpeg -version` verification.
+- The project detail screen now includes an `ffmpeg setup guide` action plus install and verify commands.
+- The app still does not auto-install system tools without explicit user action.
+
+Verification target:
+
+- Compile ffmpeg renderer, workflow, web, and tests.
+- Generate a setup guide from the web route and verify both guide files exist.
+
+Next recommended work:
+
+- Add render approval/export status using GIF/timeline assets while MP4 waits, or add a user-approved ffmpeg downloader/installer wrapper.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

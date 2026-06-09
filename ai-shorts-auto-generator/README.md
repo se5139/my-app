@@ -109,6 +109,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - render review package with `timeline.html` and `render_manifest.json`
 - render preview package with PNG frames, animated GIF, and `preview_manifest.json`
 - ffmpeg detection and optional MP4 conversion status
+- ffmpeg setup guide export with Windows install and verification commands
 
 ## Local Git Setup For This PC
 
