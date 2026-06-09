@@ -4142,6 +4142,60 @@ def result_detail_page(name: str, message: str = "") -> str:
         [str(item) for item in pre_submission_files[:12]],
         "아직 제출 전 패키지에 포함된 파일 목록이 없습니다.",
     )
+    detail_stage_labels = [
+        ("생성", True),
+        ("수정계획", isinstance(review_action_plan, dict) and bool(review_action_plan)),
+        ("재생성", isinstance(action_regeneration, dict) and bool(action_regeneration)),
+        ("최종후보", isinstance(final_candidates, dict) and bool(final_candidates)),
+        ("상세검수", isinstance(final_audit, dict) and bool(final_audit)),
+        ("제출전팩", isinstance(pre_submission, dict) and bool(pre_submission)),
+    ]
+    detail_done_count = sum(1 for _, enabled in detail_stage_labels if enabled)
+    detail_progress = round(detail_done_count / len(detail_stage_labels) * 100)
+    detail_stage_badges = "".join(
+        f"<span class='stage {'done' if enabled else 'todo'}'>{html.escape(label)}</span>"
+        for label, enabled in detail_stage_labels
+    )
+    if not (isinstance(review_action_plan, dict) and review_action_plan):
+        next_step_title = "수정 계획 만들기"
+        next_step_note = "약한 컷을 자동으로 골라 수정 액션 플랜을 먼저 저장합니다."
+        next_step_control = f"""
+        <form method="post" action="/review-action">
+          <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+          <input type="hidden" name="focus" value="weak">
+          <button class="action-button" type="submit">수정 계획 자동 저장</button>
+        </form>
+        """
+    elif not (isinstance(action_regeneration, dict) and action_regeneration):
+        next_step_title = "수정 재생성하기"
+        next_step_note = "저장된 수정 액션 플랜으로 선택 컷을 다시 생성합니다."
+        next_step_control = f"""
+        <form method="post" action="/regenerate-action">
+          <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+          <button class="action-button" type="submit">수정 플랜으로 재생성</button>
+        </form>
+        """
+    elif not (isinstance(final_candidates, dict) and final_candidates):
+        next_step_title = "최종 후보 ZIP 만들기"
+        next_step_note = "3단 비교 그리드에서 원본, 수정본, 재생성본 중 후보를 고르세요."
+        next_step_control = "<a class='action-button' href='#final-select'>최종 후보 선택으로 이동</a>"
+    elif not (isinstance(pre_submission, dict) and pre_submission):
+        next_step_title = "제출 전 패키지 만들기"
+        next_step_note = "최종 후보 ZIP, 증빙 ZIP, 검수 리포트를 한 번에 묶습니다."
+        next_step_control = f"""
+        <form method="post" action="/pre-submission-package">
+          <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+          <button class="action-button" type="submit">제출 전 패키지 만들기</button>
+        </form>
+        """
+    else:
+        next_step_title = "완료 상태 확인"
+        next_step_note = "제출 전 패키지까지 준비됐습니다. 실제 제출 전 사람 검토와 권리 증빙을 다시 확인하세요."
+        next_step_control = (
+            f"<a class='action-button' href='{html.escape(file_href(output_dir / 'pre_submission_package' / 'pre_submission_review_package.zip'))}'>제출 전 패키지 ZIP 열기</a>"
+            if (output_dir / "pre_submission_package" / "pre_submission_review_package.zip").exists()
+            else "<a class='action-button' href='#pre-submission'>제출 전 패키지 확인</a>"
+        )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -4254,6 +4308,15 @@ def result_detail_page(name: str, message: str = "") -> str:
     .button-row {{ display:flex; flex-wrap:wrap; gap:10px; }}
     button.action-button {{ border:0; border-radius:999px; padding:12px 16px; font-weight:900; background:#7fd8be; color:#1e3830; cursor:pointer; }}
     button.action-button.secondary {{ background:#fff3d8; color:#6b4c16; border:1px solid #f2cc80; }}
+    a.action-button {{ border-radius:999px; padding:12px 16px; font-weight:900; background:#7fd8be; color:#1e3830; border:1px solid #54bea0; }}
+    .workflow-panel {{ display:grid; grid-template-columns:1.2fr .8fr; gap:16px; align-items:center; border-color:#7fd8be; background:#f3fff8; }}
+    .workflow-progress {{ height:12px; border-radius:999px; background:#e2ece7; border:1px solid #b6d8ca; overflow:hidden; margin:10px 0; }}
+    .workflow-progress span {{ display:block; height:100%; background:#7fd8be; }}
+    .workflow-panel .stages {{ display:flex; flex-wrap:wrap; gap:5px; }}
+    .stage {{ display:inline-block; border-radius:999px; padding:4px 8px; font-size:12px; font-weight:900; border:1px solid transparent; }}
+    .stage.done {{ background:#dff8eb; color:#245d46; border-color:#83d7b6; }}
+    .stage.todo {{ background:#f0ece5; color:#8a7b70; border-color:#d8ccbc; }}
+    .next-step-box {{ background:#fff; border:1px solid #9be2c7; border-radius:18px; padding:14px; }}
     .audit-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:12px 0; }}
     .table-wrap {{ width:100%; overflow-x:auto; }}
     .audit-table {{ width:100%; border-collapse:separate; border-spacing:0; min-width:760px; }}
@@ -4287,6 +4350,7 @@ def result_detail_page(name: str, message: str = "") -> str:
       .thumb-grid {{ grid-template-columns:1fr; gap:12px; }}
       .thumb-triple {{ grid-template-columns:1fr; }}
       .thumb-pair {{ grid-template-columns:1fr; }}
+      .workflow-panel {{ grid-template-columns:1fr; }}
       .review-title {{ align-items:flex-start; flex-direction:column; gap:2px; }}
       .review-card {{ padding:10px; }}
       a {{ border-radius:14px; }}
@@ -4310,6 +4374,19 @@ def result_detail_page(name: str, message: str = "") -> str:
     <p><a class="nav" href="/results">최근 결과물</a><a class="nav" href="/">제작 화면</a></p>
     <p>{quick_links}</p>
   </section>
+  <section class="panel workflow-panel">
+    <div>
+      <h2>현재 단계</h2>
+      <p><strong>{detail_done_count}/{len(detail_stage_labels)}</strong> 단계 완료</p>
+      <div class="workflow-progress"><span style="width:{detail_progress}%"></span></div>
+      <div class="stages">{detail_stage_badges}</div>
+    </div>
+    <div class="next-step-box">
+      <h2>{html.escape(next_step_title)}</h2>
+      <p>{html.escape(next_step_note)}</p>
+      {next_step_control}
+    </div>
+  </section>
   <section class="panel verdict {tone(readiness_label)}">
     <h2>최종 판단</h2>
     <p><strong>{html.escape(str(readiness_label or "아직 판단 정보가 없습니다."))}</strong></p>
@@ -4332,7 +4409,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     <div class="metric"><span>문구 품질</span><strong>{html.escape(str(report.get("phrase_quality", {}).get("status", "")))}</strong><p>{html.escape(str(report.get("phrase_quality", {}).get("score", "")))}점</p></div>
     <div class="metric"><span>수정판</span><strong>{html.escape(str(revised.get("quality_status", "")))}</strong><p>{html.escape(str(revised.get("quality_score", "")))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
   </section>
-  <section class="panel">
+  <section class="panel" id="review-action">
     <h2>제출 ZIP/이미지 자동 검사</h2>
     <p>ZIP 무결성, 내부 경로, 중복 파일명, JPG 포함 여부, PNG/WebP 개수와 형식을 확인합니다. GIF는 움직임 확인용 소스로 별도 보관합니다.</p>
     <div class="grid">
@@ -4346,7 +4423,7 @@ def result_detail_page(name: str, message: str = "") -> str:
       </div>
     </div>
   </section>
-  <section class="panel">
+  <section class="panel" id="final-select">
     <h2>반려 가능성 체크</h2>
     {risk_html}
   </section>
@@ -4355,7 +4432,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     <p>문구 반복, 긴 문구, 자동 문구, 인접 컷의 표정/손동작 반복을 기준으로 먼저 볼 컷을 추립니다. 타 작품 유사성 판단은 아니므로 최종 제출 전 사람 검토가 필요합니다.</p>
     {weak_cut_html}
   </section>
-  <section class="panel">
+  <section class="panel" id="pre-submission">
     <h2>WebP 애니메이션 품질 검토</h2>
     <p>제출 ZIP에 들어갈 WebP 후보를 기준으로 용량, 크기, 프레임 수를 확인하고 GIF는 움직임 확인용 소스로 함께 보여줍니다.</p>
     <div class="motion-grid">
