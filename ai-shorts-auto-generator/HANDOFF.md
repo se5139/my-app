@@ -231,6 +231,24 @@ Next recommended work:
 
 - Add render approval/export status using GIF/timeline assets while MP4 waits, or add a user-approved ffmpeg downloader/installer wrapper.
 
+## 2026-06-10 Render Export Review Step
+
+Added render export review status:
+
+- `src/ai_shorts/render_export.py` writes `render_export_status.json` under `exports/manual_upload_package`.
+- The status records timeline, GIF preview, and MP4 readiness plus blockers and next-step guidance.
+- The project detail screen now has render export decisions: upload package possible, needs revision, or blocked.
+- If GIF/timeline are approved but MP4 is still missing, status becomes `ready_for_upload_package_mp4_pending` instead of pretending final video upload is complete.
+
+Verification target:
+
+- Compile render export, workflow, web, and tests.
+- End-to-end create draft, generate placeholder, generate GIF preview, approve render export, and verify `render_export_status.json`.
+
+Next recommended work:
+
+- Add final package checklist that requires MP4 before actual manual YouTube upload.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

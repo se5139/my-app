@@ -6,6 +6,7 @@ from typing import Any
 from .package_exporter import export_manual_upload_package
 from .ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
 from .paths import PROJECTS_DIR, ensure_data_dirs
+from .render_export import build_render_export_status
 from .render_placeholder import create_render_placeholders
 from .render_preview import create_preview_media
 from .script_lab import create_local_script_draft, script_draft_from_dict
@@ -112,3 +113,29 @@ def create_ffmpeg_setup_guide(project_id: str) -> dict[str, Any]:
     if not read_json(project_dir / "project.json", {}):
         raise FileNotFoundError(f"Project not found: {project_id}")
     return ffmpeg_setup_guide(project_dir)
+
+
+def update_render_export_review(project_id: str, decision: str, reviewer_note: str = "") -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    project_path = project_dir / "project.json"
+    project_data = read_json(project_path, {})
+    if not project_data:
+        raise FileNotFoundError(f"Project not found: {project_id}")
+
+    status = build_render_export_status(project_dir, decision, reviewer_note)
+    timestamp = now_iso()
+    project_data["render_review"] = status
+    project_data["updated_at"] = timestamp
+    if status["status"] in {"ready_for_manual_upload", "ready_for_upload_package_mp4_pending", "blocked", "needs_revision"}:
+        project_data["status"] = status["status"]
+    write_json(project_path, project_data)
+
+    state = load_app_state()
+    for item in state.projects:
+        if item.get("id") == project_id:
+            item["status"] = project_data["status"]
+            item["updated_at"] = timestamp
+            break
+    save_app_state(state)
+    return status

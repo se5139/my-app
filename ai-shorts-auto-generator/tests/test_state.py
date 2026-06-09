@@ -8,6 +8,7 @@ from ai_shorts.web_app import _render_page, _render_project_detail
 from ai_shorts.script_lab import script_draft_from_dict
 from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
+from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 
 
@@ -127,3 +128,15 @@ def test_ffmpeg_setup_guide_creates_json_and_markdown(tmp_path) -> None:
     assert "winget" in guide["recommended_windows_command"]
     assert (tmp_path / "renders" / "preview" / "ffmpeg_setup_guide.json").exists()
     assert (tmp_path / "renders" / "preview" / "ffmpeg_setup_guide.md").exists()
+
+
+def test_render_export_status_records_review_assets(tmp_path) -> None:
+    draft = create_local_script_draft("렌더 승인 테스트", "주제만 참고")
+    create_render_placeholders("p1", draft, tmp_path)
+    create_preview_media("p1", tmp_path)
+    status = build_render_export_status(tmp_path, "ready_for_upload_package", "GIF 확인 완료")
+    assert status["status"] == "ready_for_upload_package_mp4_pending"
+    assert status["assets"]["timeline_ready"] is True
+    assert status["assets"]["gif_ready"] is True
+    assert status["assets"]["mp4_ready"] is False
+    assert (tmp_path / "exports" / "manual_upload_package" / "render_export_status.json").exists()

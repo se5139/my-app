@@ -15,6 +15,7 @@ from .workflow import (
     create_ffmpeg_setup_guide,
     generate_placeholder_render,
     generate_preview_render,
+    update_render_export_review,
     update_draft_script,
 )
 
@@ -72,6 +73,7 @@ def _render_project_detail(project_id: str) -> str:
     render_dir = PROJECTS_DIR / project_id / "renders" / "placeholder"
     preview_dir = PROJECTS_DIR / project_id / "renders" / "preview"
     compliance = read_json(package_dir / "compliance_report.json", {})
+    render_export_status = read_json(package_dir / "render_export_status.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
@@ -168,6 +170,13 @@ def _render_project_detail(project_id: str) -> str:
         verify_command = str(ffmpeg_guide.get("verify_command") or "")
     if not setup_guide_path and isinstance(mp4_info, dict):
         setup_guide_path = str(mp4_info.get("setup_guide_path") or "")
+    render_export_decision = render_export_status.get("decision", "not_reviewed") if isinstance(render_export_status, dict) else "not_reviewed"
+    render_export_package_status = render_export_status.get("status", "not_reviewed") if isinstance(render_export_status, dict) else "not_reviewed"
+    render_export_note = render_export_status.get("reviewer_note", "") if isinstance(render_export_status, dict) else ""
+    render_export_next_step = render_export_status.get("next_step", "렌더 미리보기와 업로드 가능 여부를 검토하세요.") if isinstance(render_export_status, dict) else "렌더 미리보기와 업로드 가능 여부를 검토하세요."
+    render_export_assets = render_export_status.get("assets", {}) if isinstance(render_export_status, dict) else {}
+    render_export_blockers = render_export_status.get("blockers", []) if isinstance(render_export_status, dict) else []
+    render_export_blocker_text = ", ".join(str(item) for item in render_export_blockers) if render_export_blockers else "없음"
 
     return f"""
     <section class="band detail-head">
@@ -338,6 +347,36 @@ def _render_project_detail(project_id: str) -> str:
       <h2>정책 검사 리포트</h2>
       <p>상태 <span class="status">{_escape(compliance.get('status', 'unknown'))}</span> · 소스 {source_count}개 · 자산 {asset_count}개</p>
       <ol class="scenes">{findings}</ol>
+    </section>
+
+    <section class="band">
+      <h2>렌더 승인/export 상태</h2>
+      <p class="muted">timeline, GIF 미리보기, MP4 준비 상태를 확인하고 수동 업로드 패키지로 보낼 수 있는지 결정합니다.</p>
+      <form method="post" action="/render-export-review">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <label for="render_export_note">렌더 검토 메모</label>
+        <textarea id="render_export_note" name="reviewer_note" placeholder="예: timeline 확인, GIF 미리보기 승인, MP4는 ffmpeg 설치 후 생성">{_escape(render_export_note)}</textarea>
+        <div class="actions">
+          <button type="submit" name="decision" value="ready_for_upload_package">업로드 패키지 가능</button>
+          <button class="secondary" type="submit" name="decision" value="needs_render_revision">수정 필요</button>
+          <button class="warning" type="submit" name="decision" value="render_blocked">차단</button>
+          <span class="muted">상태: {_escape(render_export_package_status)} · 결정: {_escape(render_export_decision)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>준비 상태</label>
+          <p>timeline: {_escape(render_export_assets.get('timeline_ready', False))} · GIF: {_escape(render_export_assets.get('gif_ready', False))} · MP4: {_escape(render_export_assets.get('mp4_ready', False))}</p>
+          <label>차단 항목</label>
+          <p>{_escape(render_export_blocker_text)}</p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(render_export_next_step)}</p>
+          <label>상태 파일</label>
+          <p><code>{_escape(package_dir / 'render_export_status.json')}</code></p>
+        </div>
+      </div>
     </section>
 
     <section class="band">
@@ -639,6 +678,16 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/ffmpeg-guide":
                 project_id = params.get("project_id", [""])[0]
                 create_ffmpeg_setup_guide(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/render-export-review":
+                project_id = params.get("project_id", [""])[0]
+                decision = params.get("decision", ["needs_render_revision"])[0]
+                reviewer_note = params.get("reviewer_note", [""])[0]
+                if decision not in {"ready_for_upload_package", "needs_render_revision", "render_blocked"}:
+                    raise ValueError("알 수 없는 렌더 승인 상태입니다.")
+                update_render_export_review(project_id, decision, reviewer_note)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return
