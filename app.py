@@ -88,7 +88,8 @@ PRODUCT_MODES = {
         "canvas_px": 360,
         "static_target_bytes": STATIC_SUBMISSION_MAX_BYTES,
         "animated_target_bytes": ANIMATED_SUBMISSION_MAX_BYTES,
-        "zip_allows": ["png", "gif"],
+        "zip_allows": ["png", "webp"],
+        "motion_extension": "webp",
         "note": "움직이는 일반 이모티콘 제안 시안 기준: 총 24개, PNG 21개 + GIF/WebP 변환용 움직임 3개, 360x360px, 움직임 파일 개당 650KB 이하로 검토합니다.",
     },
     "mini_static": {
@@ -108,7 +109,8 @@ PRODUCT_MODES = {
         "canvas_px": 180,
         "static_target_bytes": MINI_STATIC_SUBMISSION_MAX_BYTES,
         "animated_target_bytes": MINI_ANIMATED_SUBMISSION_MAX_BYTES,
-        "zip_allows": ["png", "gif"],
+        "zip_allows": ["png", "webp"],
+        "motion_extension": "webp",
         "note": "움직이는 미니 이모티콘 기준: 총 35개, PNG 30개 + GIF/WebP 변환용 움직임 5개, 180x180px, 움직임 파일 개당 500KB 이하로 검토합니다.",
     },
 }
@@ -842,13 +844,17 @@ def build_revised_phrase_variant(
     variant_dir = output_dir / "revised_phrase_variant"
     static_dir = variant_dir / "static_png_submit"
     animated_dir = variant_dir / "animated_gif_submit"
+    webp_dir = variant_dir / "animated_webp_submit"
     preview_dir = variant_dir / "preview_jpg"
     static_dir.mkdir(parents=True, exist_ok=True)
     animated_dir.mkdir(parents=True, exist_ok=True)
+    webp_dir.mkdir(parents=True, exist_ok=True)
     preview_dir.mkdir(parents=True, exist_ok=True)
 
     static_files: list[Path] = []
     animated_files: list[Path] = []
+    webp_files: list[Path] = []
+    zip_motion_files: list[Path] = []
     preview_files: list[Path] = []
     optimization_records: list[dict[str, object]] = []
     expression_plan: list[dict[str, str]] = []
@@ -887,15 +893,24 @@ def build_revised_phrase_variant(
         frames, expression_variant = make_animated_frames(request, phrase, i, static_count, str(phrase_slot["emotion_key"]))
         frames = fit_frames_to_product(frames, spec)
         gif_path = animated_dir / f"animated_{i + 1:02d}.gif"
+        webp_path = webp_dir / f"animated_{i + 1:02d}.webp"
         preview_path = preview_dir / f"preview_animated_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_gif(frames, gif_path, int(spec["animated_target_bytes"])))
+        webp_record = save_optimized_webp(frames, webp_path, int(spec["animated_target_bytes"]))
+        optimization_records.append(webp_record)
         frames[0].save(preview_path, "JPEG", quality=92)
         animated_files.append(gif_path)
+        if webp_path.exists():
+            webp_files.append(webp_path)
+            zip_motion_files.append(webp_path)
+        else:
+            zip_motion_files.append(gif_path)
         preview_files.append(preview_path)
         expression_plan.append(
             {
-                "file": str(gif_path.relative_to(variant_dir)),
-                "type": "animated_gif",
+                "file": str((webp_path if webp_path.exists() else gif_path).relative_to(variant_dir)),
+                "source_gif_file": str(gif_path.relative_to(variant_dir)),
+                "type": "animated_webp" if webp_path.exists() else "animated_gif",
                 "phrase": phrase,
                 "original_phrase": phrase_slot.get("original_phrase", ""),
                 "phrase_source": phrase_slot["source"],
@@ -908,9 +923,9 @@ def build_revised_phrase_variant(
             }
         )
 
-    zip_name = "revised_phrase_reference_png_gif.zip"
+    zip_name = "revised_phrase_reference_png_webp.zip" if animated_count else "revised_phrase_reference_png.zip"
     zip_path = variant_dir / zip_name
-    write_zip(zip_path, [*static_files, *animated_files], variant_dir)
+    write_zip(zip_path, [*static_files, *zip_motion_files], variant_dir)
     validation = validate_output_package(variant_dir, request.product_mode, zip_path)
     optimization = optimization_summary(optimization_records)
     revised_quality = refined_quality
@@ -949,6 +964,7 @@ def build_revised_phrase_variant(
         "quality_score": revised_quality["score"],
         "static_png_count": len(static_files),
         "animated_gif_count": len(animated_files),
+        "animated_webp_count": len(webp_files),
         "report_files": [
             "revised_phrase_plan.json",
             "revised_expression_plan.json",
@@ -3403,7 +3419,7 @@ def result_detail_page(name: str) -> str:
       <li>폴더: {html.escape(str(output_dir))}</li>
       <li>상품: {html.escape(str(report.get("product_label", "")))}</li>
       <li>작업 모드: {html.escape(str(report.get("workflow_label", "")))}</li>
-      <li>PNG: {html.escape(str(report.get("static_png_count", 0)))} / GIF: {html.escape(str(report.get("animated_gif_count", 0)))}</li>
+      <li>PNG: {html.escape(str(report.get("static_png_count", 0)))} / WebP: {html.escape(str(report.get("animated_webp_count", 0)))} / GIF 소스: {html.escape(str(report.get("animated_gif_count", 0)))}</li>
       <li>문구 변경: {html.escape(str(gallery.get("changed_count", 0)))}</li>
     </ul>
   </section>
@@ -4365,14 +4381,80 @@ def save_optimized_gif(frames: list[Image.Image], path: Path, target_bytes: int)
     }
 
 
+def save_webp_variant(frames: list[Image.Image], path: Path, quality: int, frame_step: int, duration: int) -> None:
+    selected_frames = frames[::frame_step] or frames[:1]
+    webp_frames = [frame.convert("RGBA") for frame in selected_frames]
+    webp_frames[0].save(
+        path,
+        format="WEBP",
+        save_all=True,
+        append_images=webp_frames[1:],
+        duration=duration * frame_step,
+        loop=0,
+        lossless=False,
+        quality=quality,
+        method=6,
+    )
+
+
+def save_optimized_webp(frames: list[Image.Image], path: Path, target_bytes: int) -> dict[str, object]:
+    attempts: list[dict[str, object]] = []
+    variants = [
+        ("quality_88_full", 88, 1, 90),
+        ("quality_76_full", 76, 1, 95),
+        ("quality_64_full", 64, 1, 100),
+        ("quality_64_half_frames", 64, 2, 110),
+        ("quality_52_half_frames", 52, 2, 120),
+    ]
+    best_bytes = 0
+    best_data = b""
+    for attempt_name, quality, frame_step, duration in variants:
+        try:
+            save_webp_variant(frames, path, quality, frame_step, duration)
+            data = path.read_bytes()
+            size = len(data)
+            attempts.append(
+                {
+                    "attempt": attempt_name,
+                    "bytes": size,
+                    "quality": quality,
+                    "frame_step": frame_step,
+                    "frames": max(1, len(frames[::frame_step])),
+                    "duration_ms": duration * frame_step,
+                }
+            )
+            if not best_bytes or size < best_bytes:
+                best_bytes = size
+                best_data = data
+            if target_bytes and size <= target_bytes:
+                best_data = data
+                best_bytes = size
+                break
+        except Exception as exc:
+            attempts.append({"attempt": attempt_name, "error": type(exc).__name__})
+            break
+    if best_data:
+        path.write_bytes(best_data)
+    return {
+        "file": str(path),
+        "kind": "webp",
+        "target_bytes": target_bytes,
+        "final_bytes": file_size(path) if path.exists() else 0,
+        "met_target": bool(target_bytes and path.exists() and file_size(path) <= target_bytes),
+        "attempts": attempts,
+    }
+
+
 def optimization_summary(records: list[dict[str, object]]) -> dict[str, object]:
     png_records = [record for record in records if record.get("kind") == "png"]
     gif_records = [record for record in records if record.get("kind") == "gif"]
+    webp_records = [record for record in records if record.get("kind") == "webp"]
     return {
         "enabled": True,
         "file_count": len(records),
         "png_count": len(png_records),
         "gif_count": len(gif_records),
+        "webp_count": len(webp_records),
         "missed_target_count": sum(1 for record in records if not record.get("met_target")),
         "largest_final_bytes": max([int(record.get("final_bytes", 0)) for record in records] or [0]),
         "records": records,
@@ -5037,15 +5119,21 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
     allowed_extensions = {str(ext).lower() for ext in spec.get("zip_allows", ["png", "gif"])}
     static_dir = output_dir / "static_png_submit"
     animated_dir = output_dir / "animated_gif_submit"
+    webp_dir = output_dir / "animated_webp_submit"
     preview_dir = output_dir / "preview_jpg"
     zip_candidates = [
+        output_dir / "submit_ready_review_png_webp.zip",
+        output_dir / "prototype_reference_png_webp.zip",
+        output_dir / "revised_phrase_reference_png_webp.zip",
         output_dir / "submit_ready_review_png_gif.zip",
         output_dir / "submit_only_png_gif.zip",
         output_dir / "prototype_reference_png_gif.zip",
+        output_dir / "prototype_reference_png.zip",
     ]
     zip_path = zip_path or next((candidate for candidate in zip_candidates if candidate.exists()), zip_candidates[0])
     static_files = sorted(static_dir.glob("*.png"))
     animated_files = sorted(animated_dir.glob("*.gif"))
+    webp_files = sorted(webp_dir.glob("*.webp"))
     preview_files = sorted(preview_dir.glob("*.jpg"))
     issues: list[dict[str, str]] = []
 
@@ -5057,7 +5145,16 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
                 "message": f"Static PNG count is {len(static_files)}, expected {expected_static_count} for {spec['label']}.",
             }
         )
-    if len(animated_files) != expected_animated_count:
+    if "webp" in allowed_extensions:
+        if len(webp_files) != expected_animated_count:
+            issues.append(
+                {
+                    "level": "fail",
+                    "file": str(webp_dir),
+                    "message": f"Animated WebP count is {len(webp_files)}, expected {expected_animated_count} for {spec['label']}.",
+                }
+            )
+    elif len(animated_files) != expected_animated_count:
         issues.append(
             {
                 "level": "fail",
@@ -5112,6 +5209,29 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
                 }
             )
 
+    for file_path in webp_files:
+        issues.extend(validate_image_file(file_path, "WEBP", canvas_px))
+        try:
+            with Image.open(file_path) as image:
+                if image.size != (canvas_px, canvas_px):
+                    issues.append(
+                        {
+                            "level": "fail",
+                            "file": str(file_path),
+                            "message": f"WebP size is {image.size[0]}x{image.size[1]}, expected {canvas_px}x{canvas_px}.",
+                        }
+                    )
+        except Exception:
+            pass
+        if file_path.stat().st_size > animated_target_bytes:
+            issues.append(
+                {
+                    "level": "warn",
+                    "file": str(file_path),
+                    "message": f"WebP animated file is over {animated_target_bytes // 1024}KB for {spec['label']}.",
+                }
+            )
+
     if not zip_path.exists():
         issues.append({"level": "fail", "file": str(zip_path), "message": "Submit ZIP was not created."})
         zip_entries: list[str] = []
@@ -5156,6 +5276,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
         jpg_entries = [entry for entry in zip_entries if entry.lower().endswith((".jpg", ".jpeg"))]
         png_entries = [entry for entry in zip_entries if entry.lower().endswith(".png")]
         gif_entries = [entry for entry in zip_entries if entry.lower().endswith(".gif")]
+        webp_entries = [entry for entry in zip_entries if entry.lower().endswith(".webp")]
         unexpected_entries = [
             entry
             for entry in zip_entries
@@ -5186,12 +5307,13 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
                     "message": f"{spec['label']} ZIP should not contain GIF files.",
                 }
             )
-        if len(png_entries) != expected_static_count or len(gif_entries) != expected_animated_count:
+        expected_motion_entries = len(webp_entries) if "webp" in allowed_extensions else len(gif_entries)
+        if len(png_entries) != expected_static_count or expected_motion_entries != expected_animated_count:
             issues.append(
                 {
                     "level": "fail",
                     "file": str(zip_path),
-                    "message": f"ZIP has PNG {len(png_entries)} and GIF {len(gif_entries)}.",
+                    "message": f"ZIP has PNG {len(png_entries)}, GIF {len(gif_entries)}, WebP {len(webp_entries)}.",
                 }
             )
 
@@ -5204,6 +5326,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
         "warn_count": warn_count,
         "static_png_count": len(static_files),
         "animated_gif_count": len(animated_files),
+        "animated_webp_count": len(webp_files),
         "preview_jpg_count": len(preview_files),
         "zip_entry_count": len(zip_entries),
         "rules": {
@@ -5213,6 +5336,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
             "canvas_px": f"{canvas_px}x{canvas_px}",
             "static_png_count": expected_static_count,
             "animated_gif_count": expected_animated_count,
+            "animated_webp_count": expected_animated_count if "webp" in allowed_extensions else 0,
             "static_submission_target_bytes": static_target_bytes,
             "animated_submission_target_bytes": animated_target_bytes,
             "submit_zip_allows": list(allowed_extensions),
@@ -5231,10 +5355,12 @@ def build_package(request: BuildRequest) -> dict[str, object]:
     animated_count = int(spec["animated_count"])
     static_dir = output_dir / "static_png_submit"
     animated_dir = output_dir / "animated_gif_submit"
+    webp_dir = output_dir / "animated_webp_submit"
     preview_dir = output_dir / "preview_jpg"
     source_dir = output_dir / "source_materials"
     static_dir.mkdir(parents=True, exist_ok=True)
     animated_dir.mkdir(parents=True, exist_ok=True)
+    webp_dir.mkdir(parents=True, exist_ok=True)
     preview_dir.mkdir(parents=True, exist_ok=True)
     source_dir.mkdir(parents=True, exist_ok=True)
     creator_profile = generate_creator_profile(request)
@@ -5257,6 +5383,8 @@ def build_package(request: BuildRequest) -> dict[str, object]:
 
     static_files: list[Path] = []
     animated_files: list[Path] = []
+    webp_files: list[Path] = []
+    zip_motion_files: list[Path] = []
     preview_files: list[Path] = []
     optimization_records: list[dict[str, object]] = []
     expression_plan: list[dict[str, str]] = []
@@ -5298,15 +5426,24 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         frames, expression_variant = make_animated_frames(request, phrase, i, static_count, str(phrase_slot["emotion_key"]))
         frames = fit_frames_to_product(frames, spec)
         gif_path = animated_dir / f"animated_{i + 1:02d}.gif"
+        webp_path = webp_dir / f"animated_{i + 1:02d}.webp"
         preview_path = preview_dir / f"preview_animated_{i + 1:02d}.jpg"
         optimization_records.append(save_optimized_gif(frames, gif_path, int(spec["animated_target_bytes"])))
+        webp_record = save_optimized_webp(frames, webp_path, int(spec["animated_target_bytes"]))
+        optimization_records.append(webp_record)
         frames[0].save(preview_path, "JPEG", quality=92)
         animated_files.append(gif_path)
+        if webp_path.exists():
+            webp_files.append(webp_path)
+            zip_motion_files.append(webp_path)
+        else:
+            zip_motion_files.append(gif_path)
         preview_files.append(preview_path)
         expression_plan.append(
             {
-                "file": str(gif_path.relative_to(output_dir)),
-                "type": "animated_gif",
+                "file": str((webp_path if webp_path.exists() else gif_path).relative_to(output_dir)),
+                "source_gif_file": str(gif_path.relative_to(output_dir)),
+                "type": "animated_webp" if webp_path.exists() else "animated_gif",
                 "phrase": phrase,
                 "phrase_source": phrase_slot["source"],
                 "emotion": str(emotion["label"]),
@@ -5320,10 +5457,10 @@ def build_package(request: BuildRequest) -> dict[str, object]:
 
     expression_diversity = expression_diversity_summary(expression_plan)
     weak_cut_review = build_weak_cut_review(phrase_plan, expression_plan, phrase_quality)
-    zip_name = f"{guidance['zip_prefix']}_png_gif.zip"
+    zip_name = f"{guidance['zip_prefix']}_png_webp.zip" if animated_count else f"{guidance['zip_prefix']}_png.zip"
     zip_path = output_dir / zip_name
     optimization = optimization_summary(optimization_records)
-    write_zip(zip_path, [*static_files, *animated_files], output_dir)
+    write_zip(zip_path, [*static_files, *zip_motion_files], output_dir)
     validation = validate_output_package(output_dir, request.product_mode, zip_path)
     human_origin_checklist = {
         "workflow_mode": request.workflow_mode,
@@ -5430,6 +5567,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "auto_phrase_count": sum(1 for item in phrase_plan if item["source"] == "auto"),
         "static_png_count": len(static_files),
         "animated_gif_count": len(animated_files),
+        "animated_webp_count": len(webp_files),
         "preview_jpg_count": len(preview_files),
         "zip": str(zip_path),
         "zip_purpose_label": guidance["purpose_label"],
@@ -5455,6 +5593,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "notes": [
             "PNG/GIF only ZIP was created.",
             "JPG files are previews only and are not included in the submit ZIP.",
+            "GIF files are retained as motion review sources; animated submit ZIPs prefer WebP files.",
             str(spec["note"]),
             "If API quota is unavailable or exhausted, collection continues with free URL/title/domain and note analysis.",
             "Memory phrase weights are applied before default phrase suggestions.",
@@ -5589,6 +5728,7 @@ def page(
         product_label = html.escape(str(report.get("product_label", "알 수 없음"))) if isinstance(report, dict) else "알 수 없음"
         static_png_count = html.escape(str(report.get("static_png_count", 0))) if isinstance(report, dict) else "0"
         animated_gif_count = html.escape(str(report.get("animated_gif_count", 0))) if isinstance(report, dict) else "0"
+        animated_webp_count = html.escape(str(report.get("animated_webp_count", 0))) if isinstance(report, dict) else "0"
         optimization = report.get("optimization", {}) if isinstance(report, dict) else {}
         optimization_missed = html.escape(str(optimization.get("missed_target_count", 0))) if isinstance(optimization, dict) else "0"
         optimization_largest = html.escape(str(optimization.get("largest_final_bytes", 0))) if isinstance(optimization, dict) else "0"
@@ -5687,7 +5827,7 @@ def page(
           <p><strong>미리보기 비교 갤러리</strong><br>문구 변경 {gallery_changed}개 / {gallery_html}</p>
           <p><strong>결과 폴더</strong><br>{output_dir}</p>
           <p><strong>생성 ZIP</strong><br>{zip_path}</p>
-          <p>PNG {static_png_count}개, GIF {animated_gif_count}개, JPG 미리보기가 생성되었습니다.</p>
+          <p>PNG {static_png_count}개, WebP {animated_webp_count}개, GIF 소스 {animated_gif_count}개, JPG 미리보기가 생성되었습니다.</p>
           <p><strong>자동 용량 최적화</strong><br>목표 초과 {optimization_missed}개 / 최대 파일 {optimization_largest} bytes</p>
           <p><strong>제출 전 준비 점수</strong><br>{readiness_score}점 / {readiness_label}</p>
           <p><strong>사람 제작 증빙 패키지</strong><br>ZIP: {evidence_zip}<br>HTML 요약: {evidence_html}<br>누락 {evidence_missing}개 / 수동 보관 필요 {evidence_manual}개</p>
