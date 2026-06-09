@@ -3377,10 +3377,26 @@ def result_detail_page(name: str, message: str = "") -> str:
     def review_grid_html(limit: int = 32) -> str:
         original_files = sorted((output_dir / "preview_jpg").glob("*.jpg"))[:limit]
         revised_files = sorted((output_dir / "revised_phrase_variant" / "preview_jpg").glob("*.jpg"))[:limit]
-        if not original_files and not revised_files:
+        regen_items_for_grid = action_regeneration.get("items", []) if isinstance(action_regeneration, dict) else []
+        regen_by_slot = {
+            int(item.get("slot", 0)): item
+            for item in regen_items_for_grid
+            if isinstance(item, dict) and str(item.get("slot", "")).isdigit()
+        }
+        if not original_files and not revised_files and not regen_by_slot:
             return "<p>아직 표시할 미리보기 이미지가 없습니다.</p>"
         cards: list[str] = []
-        max_count = max(len(original_files), len(revised_files))
+        max_count = max(len(original_files), len(revised_files), max(regen_by_slot.keys(), default=0))
+
+        def preview_cell(label: str, image_path: Path | None, alt: str, phrase_text: str = "", extra_class: str = "") -> str:
+            image_html = (
+                f"<a href='{html.escape(file_href(image_path))}'><img src='{html.escape(file_href(image_path))}' alt='{html.escape(alt)}'></a>"
+                if image_path and image_path.exists()
+                else f"<div class='missing-preview'>{html.escape(label)} 없음</div>"
+            )
+            phrase_html = f"<small>{html.escape(phrase_text)}</small>" if phrase_text else ""
+            return f"<div class='{html.escape(extra_class)}'><span>{html.escape(label)}</span>{image_html}{phrase_html}</div>"
+
         for index in range(max_count):
             phrase_slot = phrase_plan[index] if index < len(phrase_plan) and isinstance(phrase_plan[index], dict) else {}
             phrase = str(phrase_slot.get("phrase", ""))
@@ -3388,26 +3404,26 @@ def result_detail_page(name: str, message: str = "") -> str:
             source = str(phrase_slot.get("source", ""))
             original = original_files[index] if index < len(original_files) else None
             revised_preview = revised_files[index] if index < len(revised_files) else None
-            original_img = (
-                f"<a href='{html.escape(file_href(original))}'><img src='{html.escape(file_href(original))}' alt='원본 {index + 1}'></a>"
-                if original
-                else "<div class='missing-preview'>원본 없음</div>"
+            regen_item = regen_by_slot.get(index + 1, {})
+            regen_preview = (
+                output_dir / "action_regeneration" / str(regen_item.get("preview_file", ""))
+                if regen_item
+                else None
             )
-            revised_img = (
-                f"<a href='{html.escape(file_href(revised_preview))}'><img src='{html.escape(file_href(revised_preview))}' alt='수정본 {index + 1}'></a>"
-                if revised_preview
-                else "<div class='missing-preview'>수정본 없음</div>"
-            )
+            regen_phrase = str(regen_item.get("regenerated_phrase", "")) if regen_item else ""
+            regen_badge = "<span class='regen-badge'>재생성 후보</span>" if regen_item else "<span class='same-badge'>원본 흐름</span>"
+            cell_class = "thumb-triple has-regen" if regen_item else "thumb-triple"
             cards.append(
                 f"""
-                <div class="review-card">
-                  <div class="review-title"><strong>#{index + 1:02d}</strong><span>{html.escape(emotion_label or "감정 미확인")}</span></div>
-                  <div class="thumb-pair">
-                    <div><span>원본</span>{original_img}</div>
-                    <div><span>수정본</span>{revised_img}</div>
+                <div class="review-card {'regen-card' if regen_item else ''}">
+                  <div class="review-title"><strong>#{index + 1:02d}</strong><span>{html.escape(emotion_label or "감정 미확인")} {regen_badge}</span></div>
+                  <div class="{cell_class}">
+                    {preview_cell("원본", original, f"원본 {index + 1}", phrase)}
+                    {preview_cell("문구 수정본", revised_preview, f"수정본 {index + 1}", "", "")}
+                    {preview_cell("재생성본", regen_preview, f"재생성본 {index + 1}", regen_phrase, "regen-cell")}
                   </div>
-                  <p class="review-phrase">{html.escape(phrase or "문구 없음")}</p>
-                  <p class="review-meta">출처 {html.escape(source or "-")} · 컷별 표정/손동작 변주 적용</p>
+                  <p class="review-phrase">{html.escape(regen_phrase or phrase or "문구 없음")}</p>
+                  <p class="review-meta">출처 {html.escape(source or "-")} · 원본/수정본/재생성본 비교 · 최종 후보는 사람 검토 후 선택</p>
                 </div>
                 """
             )
@@ -3654,8 +3670,12 @@ def result_detail_page(name: str, message: str = "") -> str:
     .verdict + .grid + .grid {{ display:none; }}
     .thumb-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }}
     .review-card {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:20px; padding:12px; }}
+    .review-card.regen-card {{ border-color:#7fd8be; background:#f3fff8; }}
     .review-title {{ display:flex; justify-content:space-between; gap:8px; align-items:center; font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .review-title span {{ color:#6f625f; font-size:13px; }}
+    .regen-badge, .same-badge {{ display:inline-block; margin-left:6px; padding:3px 7px; border-radius:999px; font-size:12px; font-weight:900; }}
+    .regen-badge {{ background:#dff8eb; color:#245d46; border:1px solid #83d7b6; }}
+    .same-badge {{ background:#f0ece5; color:#5d534e; border:1px solid #d8ccbc; }}
     .review-phrase {{ margin:10px 0 4px; color:#2d2424; font-weight:900; }}
     .review-meta {{ margin:0; font-size:12px; color:#8a7b70; }}
     .direction-note {{ padding:14px 16px; border-radius:18px; background:#fff3d8; border:1px solid #f2cc80; color:#6b4c16; font-weight:800; }}
@@ -3683,6 +3703,13 @@ def result_detail_page(name: str, message: str = "") -> str:
     button.action-button {{ border:0; border-radius:999px; padding:12px 16px; font-weight:900; background:#7fd8be; color:#1e3830; cursor:pointer; }}
     button.action-button.secondary {{ background:#fff3d8; color:#6b4c16; border:1px solid #f2cc80; }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
+    .thumb-triple {{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }}
+    .thumb-triple > div {{ min-width:0; }}
+    .thumb-triple span, .thumb-triple small {{ display:block; }}
+    .thumb-triple span {{ font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
+    .thumb-triple small {{ margin-top:6px; color:#2d2424; font-weight:800; line-height:1.35; overflow-wrap:anywhere; }}
+    .thumb-triple img {{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:14px; background:#fff; border:1px solid #ead8bc; box-shadow:0 8px 18px rgba(96,69,45,.08); }}
+    .thumb-triple .regen-cell img {{ border-color:#7fd8be; box-shadow:0 8px 20px rgba(52,126,101,.15); }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
     .thumb-pair img {{ width:100%; border-radius:14px; background:#fff; border:1px solid #ead8bc; box-shadow:0 8px 18px rgba(96,69,45,.08); }}
@@ -3697,6 +3724,7 @@ def result_detail_page(name: str, message: str = "") -> str:
       h2 {{ font-size:20px; }}
       .grid {{ grid-template-columns:1fr; gap:12px; }}
       .thumb-grid {{ grid-template-columns:1fr; gap:12px; }}
+      .thumb-triple {{ grid-template-columns:1fr; }}
       .thumb-pair {{ grid-template-columns:1fr; }}
       .review-title {{ align-items:flex-start; flex-direction:column; gap:2px; }}
       .review-card {{ padding:10px; }}
