@@ -151,6 +151,24 @@ Next recommended work:
 - Add actual video render placeholder generation.
 - Then add a render review section to the detail page.
 
+## 2026-06-09 Render Placeholder Step
+
+Added render placeholder generation:
+
+- `src/ai_shorts/render_placeholder.py` creates 1080x1920 SVG scene cards and `render_plan.json`.
+- `workflow.generate_placeholder_render(...)` loads a saved project/script and creates render artifacts.
+- Detail screen now has a "렌더 계획 생성" action and render artifact table.
+
+Verification target:
+
+- Compile `render_placeholder.py`, `workflow.py`, `web_app.py`, and tests.
+- End-to-end create a draft through the web form, generate render placeholders, and verify `render_plan.json` plus scene SVG files exist.
+
+Next recommended work:
+
+- Add simple MP4 render from the generated SVG/placeholders.
+- Then add render review and export status.
+
 ## User Feature Direction Captured
 
 The user wants:

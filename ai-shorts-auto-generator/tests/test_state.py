@@ -6,6 +6,7 @@ from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
 from ai_shorts.script_lab import script_draft_from_dict
+from ai_shorts.render_placeholder import create_render_placeholders
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -90,3 +91,11 @@ def test_script_draft_round_trips_from_dict() -> None:
     loaded = script_draft_from_dict(draft.to_dict())
     assert loaded.title == draft.title
     assert loaded.scenes[0].caption == draft.scenes[0].caption
+
+
+def test_render_placeholder_plan_shape(tmp_path) -> None:
+    draft = create_local_script_draft("렌더 테스트", "주제만 참고")
+    plan = create_render_placeholders("p1", draft, tmp_path)
+    assert plan["status"] == "placeholder_ready"
+    assert plan["scene_count"] == len(draft.scenes)
+    assert (tmp_path / "renders" / "placeholder" / "render_plan.json").exists()

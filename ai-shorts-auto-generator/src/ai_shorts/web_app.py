@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .workflow import create_draft_package, update_draft_script
+from .workflow import create_draft_package, generate_placeholder_render, update_draft_script
 
 
 HOST = "127.0.0.1"
@@ -62,8 +62,10 @@ def _render_project_detail(project_id: str) -> str:
     project = _read_project_file(project_id, "project.json", {})
     script = _read_project_file(project_id, "script_draft.json", {})
     package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
+    render_dir = PROJECTS_DIR / project_id / "renders" / "placeholder"
     compliance = read_json(package_dir / "compliance_report.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
+    render_plan = read_json(render_dir / "render_plan.json", {})
 
     scenes = "".join(
         "<tr>"
@@ -118,6 +120,17 @@ def _render_project_detail(project_id: str) -> str:
         """
         for idx, scene in enumerate(script.get("scenes", []))
     )
+    render_rows = "".join(
+        "<tr>"
+        f"<td>{int(scene.get('scene_no', idx + 1))}</td>"
+        f"<td>{_escape(scene.get('caption'))}</td>"
+        f"<td>{_escape(scene.get('duration_sec'))}s</td>"
+        f"<td><code>{_escape(scene.get('placeholder_svg'))}</code></td>"
+        "</tr>"
+        for idx, scene in enumerate(render_plan.get("scenes", []))
+    )
+    if not render_rows:
+        render_rows = '<tr><td colspan="4" class="muted">아직 렌더 placeholder가 없습니다.</td></tr>'
 
     return f"""
     <section class="band detail-head">
@@ -204,6 +217,19 @@ def _render_project_detail(project_id: str) -> str:
         <thead><tr><th>#</th><th>자막</th><th>내레이션</th><th>비주얼 방향</th></tr></thead>
         <tbody>{scenes}</tbody>
       </table>
+    </section>
+
+    <section class="band">
+      <h2>렌더 placeholder</h2>
+      <p class="muted">실제 영상 생성 전, 장면별 1080x1920 SVG와 render_plan.json을 만들어 영상 구조를 확인합니다.</p>
+      <form method="post" action="/render-placeholder">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">렌더 계획 생성</button>
+          <span class="muted">상태: {_escape(render_plan.get('status', 'not_created'))}</span>
+        </div>
+      </form>
+      <table><thead><tr><th>#</th><th>자막</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
     </section>
 
     <section class="band">
@@ -486,6 +512,12 @@ class Handler(BaseHTTPRequestHandler):
                         "scene_captions": scene_captions,
                     },
                 )
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/render-placeholder":
+                project_id = params.get("project_id", [""])[0]
+                generate_placeholder_render(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

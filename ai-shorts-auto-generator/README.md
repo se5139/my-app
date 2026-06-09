@@ -105,6 +105,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - manual upload package file paths
 - review decision controls: approve, needs revision, or block
 - script edit controls for title, hook, thumbnail text, narration, and scene captions
+- render placeholder generation with scene SVG files and `render_plan.json`
 
 ## Local Git Setup For This PC
 
