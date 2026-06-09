@@ -36,3 +36,5 @@ Codex가 작업할 때도 원칙은 같습니다.
 4. `https://github.com/se5139/my-app.git`의 `main` 브랜치로 푸시
 
 이렇게 유지하면 다른 PC에서도 같은 저장소를 받아 바로 이어서 작업할 수 있습니다.
+
+Continuity check: SAVE_WORK_TO_GITHUB.bat and PULL_LATEST_BEFORE_WORK.bat are part of the standard workflow.
