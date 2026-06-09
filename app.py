@@ -2523,6 +2523,24 @@ def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
             final_audit = {}
         if not isinstance(pre_submission, dict):
             pre_submission = {}
+        if not stages["review_action"]:
+            next_action_label = "수정 계획 만들기"
+            next_action_reason = "약한 컷을 골라 review_action_plan.json 저장"
+        elif not stages["regenerated"]:
+            next_action_label = "수정 재생성하기"
+            next_action_reason = "저장된 수정 플랜으로 선택 컷 재생성"
+        elif not stages["final_candidates"]:
+            next_action_label = "최종 후보 ZIP 만들기"
+            next_action_reason = "원본/수정본/재생성본 중 후보 선택"
+        elif not stages["final_audit"]:
+            next_action_label = "상세 검수 갱신"
+            next_action_reason = "최종 후보 ZIP 파일별 검수 확인"
+        elif not stages["pre_submission"]:
+            next_action_label = "제출 전 패키지 만들기"
+            next_action_reason = "최종 후보와 증빙 리포트를 한 번에 묶기"
+        else:
+            next_action_label = "완료 상태 확인"
+            next_action_reason = "최종 후보와 제출 전 패키지 확인"
         rows.append(
             {
                 "folder": str(output_dir),
@@ -2554,6 +2572,9 @@ def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
                 "pre_submission_zip": str(output_dir / "pre_submission_package" / "pre_submission_review_package.zip")
                 if (output_dir / "pre_submission_package" / "pre_submission_review_package.zip").exists()
                 else "",
+                "next_action_label": next_action_label,
+                "next_action_reason": next_action_reason,
+                "next_action_href": f"/result?name={quote(output_dir.name)}",
             }
         )
         if len(rows) >= limit:
@@ -3646,6 +3667,12 @@ def results_page() -> str:
             ]
             if item
         ) or "다음 단계 대기"
+        next_action_href = str(row.get("next_action_href", ""))
+        next_action_html = (
+            f"<a class='next-action' href='{html.escape(next_action_href)}'>{html.escape(str(row.get('next_action_label', '다음 작업')))}</a>"
+            if next_action_href
+            else html.escape(str(row.get("next_action_label", "")))
+        )
         row_html += f"""
         <tr>
           <td>{html.escape(str(row.get("mtime", "")))}</td>
@@ -3659,11 +3686,12 @@ def results_page() -> str:
           <td>{html.escape(str(row.get("validation_status", "")))}<br><small>{html.escape(final_line)}</small></td>
           <td>{html.escape(str(row.get("readiness_score", "")))} / {html.escape(str(row.get("readiness_label", "")))}</td>
           <td>{html.escape(str(row.get("phrase_quality_status", "")))} / {html.escape(str(row.get("phrase_quality_score", "")))}</td>
+          <td>{next_action_html}<br><small>{html.escape(str(row.get("next_action_reason", "")))}</small></td>
           <td>{" ".join(links)}</td>
         </tr>
         """
     if not row_html:
-        row_html = "<tr><td colspan='8'>아직 생성 결과가 없습니다.</td></tr>"
+        row_html = "<tr><td colspan='9'>아직 생성 결과가 없습니다.</td></tr>"
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -3689,6 +3717,7 @@ def results_page() -> str:
     .stage.done {{ background:#dff8eb; color:#245d46; border-color:#83d7b6; }}
     .stage.todo {{ background:#f0ece5; color:#8a7b70; border-color:#d8ccbc; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
+    a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
     @media (max-width: 860px) {{ table {{ font-size:13px; }} th:nth-child(3), td:nth-child(3) {{ display:none; }} .progress {{ width:90px; }} }}
   </style>
@@ -3709,7 +3738,7 @@ def results_page() -> str:
   <section class="panel">
     <table>
       <thead>
-        <tr><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>바로가기</th></tr>
+        <tr><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>다음 작업</th><th>바로가기</th></tr>
       </thead>
       <tbody>{row_html}</tbody>
     </table>
