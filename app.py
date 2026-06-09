@@ -3168,6 +3168,18 @@ def result_detail_page(name: str) -> str:
     a {{ display:inline-block; margin:3px 5px 3px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:7px 11px; }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
     ul {{ padding-left:20px; }}
+    @media (max-width: 720px) {{
+      main {{ width: min(100% - 20px, 1120px); padding:24px 0; }}
+      .panel {{ border-radius:20px; padding:18px; }}
+      h1 {{ font-size:34px; line-height:1.05; }}
+      h2 {{ font-size:20px; }}
+      .grid {{ grid-template-columns:1fr; gap:12px; }}
+      .thumb-grid {{ grid-template-columns:1fr; gap:12px; }}
+      .thumb-pair {{ grid-template-columns:1fr; }}
+      .review-title {{ align-items:flex-start; flex-direction:column; gap:2px; }}
+      .review-card {{ padding:10px; }}
+      a {{ border-radius:14px; }}
+    }}
   </style>
 </head>
 <body>
