@@ -5,8 +5,8 @@ from typing import Any
 
 from .package_exporter import export_manual_upload_package
 from .paths import PROJECTS_DIR, ensure_data_dirs
-from .script_lab import create_local_script_draft
-from .state import create_project, write_json
+from .script_lab import create_local_script_draft, script_draft_from_dict
+from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
 
 
 def create_draft_package(topic: str, source_notes: str = "") -> dict[str, Any]:
@@ -17,3 +17,52 @@ def create_draft_package(topic: str, source_notes: str = "") -> dict[str, Any]:
     write_json(project_dir / "script_draft.json", script.to_dict())
     export = export_manual_upload_package(project, script)
     return {"project": asdict(project), "script": script.to_dict(), "export": export}
+
+
+def update_draft_script(project_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    project_data = read_json(project_dir / "project.json", {})
+    if not project_data:
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    script_data = read_json(project_dir / "script_draft.json", {})
+    if not script_data:
+        raise FileNotFoundError(f"Script draft not found: {project_id}")
+
+    script = script_draft_from_dict(script_data)
+    script.title = str(updates.get("title", script.title)).strip() or script.title
+    script.hook = str(updates.get("hook", script.hook)).strip() or script.hook
+    script.thumbnail_text = str(updates.get("thumbnail_text", script.thumbnail_text)).strip() or script.thumbnail_text
+    script.narration = str(updates.get("narration", script.narration)).strip() or script.narration
+
+    scene_captions = updates.get("scene_captions", [])
+    for idx, caption in enumerate(scene_captions):
+        if idx < len(script.scenes):
+            script.scenes[idx].caption = str(caption).strip() or script.scenes[idx].caption
+
+    timestamp = now_iso()
+    project_data["title"] = script.title
+    project_data["status"] = "needs_review"
+    project_data["updated_at"] = timestamp
+    project_data["review"] = {
+        "status": "needs_review",
+        "reviewer_note": "대본이 수정되어 다시 검토가 필요합니다.",
+        "reviewed_at": timestamp,
+    }
+
+    write_json(project_dir / "project.json", project_data)
+    write_json(project_dir / "script_draft.json", script.to_dict())
+
+    project = ShortProject(**project_data)
+    export = export_manual_upload_package(project, script)
+
+    state = load_app_state()
+    for item in state.projects:
+        if item.get("id") == project_id:
+            item["title"] = script.title
+            item["status"] = "needs_review"
+            item["updated_at"] = timestamp
+            break
+    save_app_state(state)
+
+    return {"project": project_data, "script": script.to_dict(), "export": export}

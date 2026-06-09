@@ -33,6 +33,30 @@ class ScriptDraft:
         }
 
 
+def script_draft_from_dict(data: dict[str, Any]) -> ScriptDraft:
+    scenes = [
+        SceneDraft(
+            order=int(scene.get("order", idx + 1)),
+            caption=str(scene.get("caption", "")),
+            visual_direction=str(scene.get("visual_direction", "")),
+            narration=str(scene.get("narration", "")),
+        )
+        for idx, scene in enumerate(data.get("scenes", []))
+    ]
+    return ScriptDraft(
+        topic=str(data.get("topic", "")),
+        title=str(data.get("title", "")),
+        hook=str(data.get("hook", "")),
+        narration=str(data.get("narration", "")),
+        scenes=scenes,
+        thumbnail_text=str(data.get("thumbnail_text", "")),
+        description=str(data.get("description", "")),
+        tags=[str(tag) for tag in data.get("tags", [])],
+        pinned_comment=str(data.get("pinned_comment", "")),
+        transformation_note=str(data.get("transformation_note", "")),
+    )
+
+
 def _clean_topic(topic: str) -> str:
     cleaned = re.sub(r"\s+", " ", topic.strip())
     return cleaned or "생활에 도움 되는 쇼츠"

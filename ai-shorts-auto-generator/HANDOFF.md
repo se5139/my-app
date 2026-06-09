@@ -132,6 +132,25 @@ Next recommended work:
 - Add simple edit controls for title, hook, narration, and scene captions.
 - Then add actual video render placeholder generation.
 
+## 2026-06-09 Script Edit Step
+
+Added draft script editing on the saved draft detail screen:
+
+- `script_lab.script_draft_from_dict(...)` restores saved script JSON into dataclasses.
+- `workflow.update_draft_script(...)` updates title, hook, thumbnail text, narration, and scene captions.
+- Editing regenerates the manual upload package and compliance report.
+- Editing resets project status to `needs_review` with a review note.
+
+Verification target:
+
+- Compile `script_lab.py`, `workflow.py`, `web_app.py`, and tests.
+- End-to-end create a draft through the web form, edit script fields, confirm `script_draft.json` changed, and confirm status returns to `needs_review`.
+
+Next recommended work:
+
+- Add actual video render placeholder generation.
+- Then add a render review section to the detail page.
+
 ## User Feature Direction Captured
 
 The user wants:

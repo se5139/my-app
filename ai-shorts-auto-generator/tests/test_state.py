@@ -5,6 +5,7 @@ from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, So
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
+from ai_shorts.script_lab import script_draft_from_dict
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -82,3 +83,10 @@ def test_update_project_review_missing_project_raises() -> None:
     except FileNotFoundError:
         return
     raise AssertionError("missing project should raise FileNotFoundError")
+
+
+def test_script_draft_round_trips_from_dict() -> None:
+    draft = create_local_script_draft("대본 수정 테스트", "주제만 참고")
+    loaded = script_draft_from_dict(draft.to_dict())
+    assert loaded.title == draft.title
+    assert loaded.scenes[0].caption == draft.scenes[0].caption

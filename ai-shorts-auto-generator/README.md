@@ -104,6 +104,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - compliance report
 - manual upload package file paths
 - review decision controls: approve, needs revision, or block
+- script edit controls for title, hook, thumbnail text, narration, and scene captions
 
 ## Local Git Setup For This PC
 

@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .workflow import create_draft_package
+from .workflow import create_draft_package, update_draft_script
 
 
 HOST = "127.0.0.1"
@@ -111,6 +111,13 @@ def _render_project_detail(project_id: str) -> str:
     review = project.get("review", {}) if isinstance(project, dict) else {}
     reviewer_note = review.get("reviewer_note", "") if isinstance(review, dict) else ""
     reviewed_at = review.get("reviewed_at", "") if isinstance(review, dict) else ""
+    scene_inputs = "".join(
+        f"""
+        <label for="scene_caption_{idx}">장면 {idx + 1} 자막</label>
+        <input id="scene_caption_{idx}" name="scene_caption_{idx}" value="{_escape(scene.get('caption'))}">
+        """
+        for idx, scene in enumerate(script.get("scenes", []))
+    )
 
     return f"""
     <section class="band detail-head">
@@ -163,6 +170,32 @@ def _render_project_detail(project_id: str) -> str:
       </div>
       <label>전체 내레이션</label>
       <p class="narration">{_escape(script.get('narration'))}</p>
+    </section>
+
+    <section class="band">
+      <h2>대본 수정</h2>
+      <p class="muted">저장하면 정책 검사 리포트와 수동 업로드 패키지가 새 내용으로 다시 생성되고, 상태는 재검토 필요로 바뀝니다.</p>
+      <form method="post" action="/edit-script">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="grid two">
+          <div>
+            <label for="edit_title">제목</label>
+            <input id="edit_title" name="title" value="{_escape(script.get('title'))}">
+          </div>
+          <div>
+            <label for="edit_thumbnail">썸네일 문구</label>
+            <input id="edit_thumbnail" name="thumbnail_text" value="{_escape(script.get('thumbnail_text'))}">
+          </div>
+        </div>
+        <label for="edit_hook">후킹</label>
+        <input id="edit_hook" name="hook" value="{_escape(script.get('hook'))}">
+        <label for="edit_narration">전체 내레이션</label>
+        <textarea id="edit_narration" name="narration">{_escape(script.get('narration'))}</textarea>
+        <div class="grid two">{scene_inputs}</div>
+        <div class="actions">
+          <button type="submit">수정 저장</button>
+        </div>
+      </form>
     </section>
 
     <section class="band">
@@ -433,6 +466,26 @@ class Handler(BaseHTTPRequestHandler):
                 if decision not in {"approved_for_export", "needs_revision", "blocked"}:
                     raise ValueError("알 수 없는 검토 상태입니다.")
                 update_project_review(project_id, decision, reviewer_note)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/edit-script":
+                project_id = params.get("project_id", [""])[0]
+                scene_captions: list[str] = []
+                index = 0
+                while f"scene_caption_{index}" in params:
+                    scene_captions.append(params.get(f"scene_caption_{index}", [""])[0])
+                    index += 1
+                update_draft_script(
+                    project_id,
+                    {
+                        "title": params.get("title", [""])[0],
+                        "hook": params.get("hook", [""])[0],
+                        "thumbnail_text": params.get("thumbnail_text", [""])[0],
+                        "narration": params.get("narration", [""])[0],
+                        "scene_captions": scene_captions,
+                    },
+                )
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return
