@@ -3471,10 +3471,12 @@ def draw_expression_overlay(
         draw.ellipse((234, cheek_y - 2, 272, cheek_y + 26), fill="#ff7fa1")
 
     gesture = str(variant["gesture"])
-    hand_y = 238 + bounce
+    hand_y = 226 + bounce
     if gesture == "tiny_up_hands":
-        draw.line((102, hand_y, 78, hand_y - 24), fill=ink, width=6)
-        draw.line((258, hand_y, 282, hand_y - 24), fill=ink, width=6)
+        draw.line((116, hand_y + 4, 92, hand_y - 12), fill=ink, width=5)
+        draw.line((244, hand_y + 4, 268, hand_y - 12), fill=ink, width=5)
+        draw.ellipse((82, hand_y - 26, 108, hand_y), fill=white, outline=ink, width=4)
+        draw.ellipse((252, hand_y - 26, 278, hand_y), fill=white, outline=ink, width=4)
     elif gesture == "bow_hands":
         draw.arc((128, hand_y - 8, 176, hand_y + 28), start=210, end=330, fill=ink, width=5)
         draw.arc((184, hand_y - 8, 232, hand_y + 28), start=210, end=330, fill=ink, width=5)
@@ -3488,13 +3490,17 @@ def draw_expression_overlay(
         draw.arc((84, hand_y - 24, 174, hand_y + 44), start=220, end=350, fill=ink, width=5)
         draw.arc((186, hand_y - 24, 276, hand_y + 44), start=190, end=320, fill=ink, width=5)
     elif gesture == "raised_hands":
-        draw.line((104, hand_y, 74, hand_y - 42), fill=ink, width=6)
-        draw.line((256, hand_y, 286, hand_y - 42), fill=ink, width=6)
+        draw.line((108, hand_y, 82, hand_y - 36), fill=ink, width=5)
+        draw.line((252, hand_y, 278, hand_y - 36), fill=ink, width=5)
+        draw.ellipse((70, hand_y - 50, 96, hand_y - 24), fill=white, outline=ink, width=4)
+        draw.ellipse((264, hand_y - 50, 290, hand_y - 24), fill=white, outline=ink, width=4)
     elif gesture == "blanket":
         draw.rounded_rectangle((110, hand_y - 2, 250, hand_y + 44), radius=18, fill="#dff4ff", outline=ink, width=4)
     elif gesture == "celebrate":
-        draw.line((104, hand_y, 72, hand_y - 48), fill=ink, width=6)
-        draw.line((256, hand_y, 288, hand_y - 48), fill=ink, width=6)
+        draw.line((108, hand_y, 78, hand_y - 42), fill=ink, width=5)
+        draw.line((252, hand_y, 282, hand_y - 42), fill=ink, width=5)
+        draw.ellipse((66, hand_y - 56, 92, hand_y - 30), fill=white, outline=ink, width=4)
+        draw.ellipse((268, hand_y - 56, 294, hand_y - 30), fill=white, outline=ink, width=4)
         draw_star(draw, 72, hand_y - 58, 9, "#ffca72")
         draw_star(draw, 288, hand_y - 58, 9, "#ffca72")
 
@@ -3589,8 +3595,8 @@ def draw_uploaded_sketch_character(
     y = 168 - layer.height // 2 + bounce
     image.paste(layer, (x, y), layer)
     draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((116, 242 + bounce, 244, 288 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
-    draw.line((142, 266 + bounce, 218, 266 + bounce), fill="#ffffff", width=4)
+    draw.rounded_rectangle((116, 230 + bounce, 244, 274 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
+    draw.line((142, 252 + bounce, 218, 252 + bounce), fill="#ffffff", width=4)
 
 
 def generate_creator_profile(request: BuildRequest) -> dict[str, str]:
@@ -3652,8 +3658,8 @@ def draw_soft_bear(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str
     draw.arc((180, 176 + bounce, 218, 214 + bounce), start=110, end=170, fill="#3b2f2f", width=4)
     draw.ellipse((94, 176 + bounce, 122, 199 + bounce), fill="#ffb7c9")
     draw.ellipse((238, 176 + bounce, 266, 199 + bounce), fill="#ffb7c9")
-    draw.rounded_rectangle((116, 238 + bounce, 244, 286 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
-    draw.line((136, 263 + bounce, 224, 263 + bounce), fill="#ffffff", width=4)
+    draw.rounded_rectangle((116, 228 + bounce, 244, 274 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
+    draw.line((136, 252 + bounce, 224, 252 + bounce), fill="#ffffff", width=4)
     draw.ellipse((cx - 5, cy - 5, cx + 5, cy + 5), fill="#ffffff")
 
 
@@ -3671,8 +3677,8 @@ def draw_bounce_rabbit(draw: ImageDraw.ImageDraw, base_color: str, accent_color:
     draw.arc((176, 190 + bounce, 214, 226 + bounce), start=102, end=170, fill="#3b2f2f", width=4)
     draw.ellipse((92, 190 + bounce, 122, 214 + bounce), fill="#ffb7c9")
     draw.ellipse((238, 190 + bounce, 268, 214 + bounce), fill="#ffb7c9")
-    draw.rounded_rectangle((116, 244 + bounce, 244, 288 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
-    draw.line((142, 266 + bounce, 218, 266 + bounce), fill="#ffffff", width=4)
+    draw.rounded_rectangle((116, 230 + bounce, 244, 274 + bounce), radius=22, fill=accent_color, outline="#3b2f2f", width=4)
+    draw.line((142, 252 + bounce, 218, 252 + bounce), fill="#ffffff", width=4)
 
 
 def draw_wink_cat(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str, index: int, bounce: int = 0) -> None:
@@ -3691,8 +3697,8 @@ def draw_wink_cat(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str,
     draw.line((288, 198 + bounce, 325, 204 + bounce), fill="#3b2f2f", width=3)
     draw.arc((146, 188 + bounce, 184, 222 + bounce), start=10, end=82, fill="#3b2f2f", width=4)
     draw.arc((176, 188 + bounce, 214, 222 + bounce), start=98, end=170, fill="#3b2f2f", width=4)
-    draw.rounded_rectangle((116, 240 + bounce, 244, 286 + bounce), radius=20, fill=accent_color, outline="#3b2f2f", width=4)
-    draw.ellipse((169, 250 + bounce, 191, 272 + bounce), fill="#ffffff")
+    draw.rounded_rectangle((116, 228 + bounce, 244, 274 + bounce), radius=20, fill=accent_color, outline="#3b2f2f", width=4)
+    draw.ellipse((169, 240 + bounce, 191, 262 + bounce), fill="#ffffff")
 
 
 def draw_round_blob(draw: ImageDraw.ImageDraw, base_color: str, accent_color: str, index: int, bounce: int = 0) -> None:
@@ -3705,9 +3711,9 @@ def draw_round_blob(draw: ImageDraw.ImageDraw, base_color: str, accent_color: st
     draw.ellipse((95, 178 + bounce, 130, 206 + bounce), fill="#ffb7c9")
     draw.ellipse((230, 178 + bounce, 265, 206 + bounce), fill="#ffb7c9")
     draw.rounded_rectangle((150, 184 + bounce, 210, 216 + bounce), radius=14, fill="#ffffff", outline="#3b2f2f", width=4)
-    draw.rounded_rectangle((112, 246 + bounce, 248, 292 + bounce), radius=24, fill=accent_color, outline="#3b2f2f", width=4)
-    draw.arc((134, 245 + bounce, 168, 283 + bounce), start=250, end=35, fill="#ffffff", width=4)
-    draw.arc((194, 245 + bounce, 228, 283 + bounce), start=145, end=290, fill="#ffffff", width=4)
+    draw.rounded_rectangle((112, 230 + bounce, 248, 274 + bounce), radius=24, fill=accent_color, outline="#3b2f2f", width=4)
+    draw.arc((134, 229 + bounce, 168, 267 + bounce), start=250, end=35, fill="#ffffff", width=4)
+    draw.arc((194, 229 + bounce, 228, 267 + bounce), start=145, end=290, fill="#ffffff", width=4)
 
 
 def draw_character_style(
