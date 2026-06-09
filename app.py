@@ -2657,6 +2657,136 @@ def build_review_action_plan(
     return plan
 
 
+def action_phrase(original: str, emotion_key: str, action: dict[str, object]) -> str:
+    for suggestion in action.get("suggestions", []):
+        text = str(suggestion)
+        if text.startswith("대체 문구 후보:"):
+            candidate = text.split(":", 1)[1].strip()
+            if candidate:
+                return candidate[:18]
+    shorter = suggest_shorter_phrase(original)
+    if shorter and shorter != original:
+        return shorter
+    candidates = safe_phrase_candidates(emotion_key, {compact_phrase_key(original)}, 3)
+    return candidates[0] if candidates else original
+
+
+def build_action_regeneration(output_dir: Path) -> dict[str, object]:
+    report = read_json_file(output_dir / "build_report.json", {})
+    phrase_plan = read_json_file(output_dir / "phrase_plan.json", [])
+    action_plan = read_json_file(output_dir / "review_action_plan.json", {})
+    if not isinstance(report, dict):
+        report = {}
+    if not isinstance(phrase_plan, list):
+        phrase_plan = []
+    if not isinstance(action_plan, dict) or not action_plan.get("actions"):
+        raise ValueError("먼저 검토 후 수정 액션을 저장해야 합니다.")
+
+    product_mode = str(report.get("product_mode", "standard_static"))
+    spec = product_mode_spec(product_mode)
+    static_count = int(spec["static_count"])
+    target_dir = output_dir / "action_regeneration"
+    static_dir = target_dir / "static_png_submit"
+    gif_dir = target_dir / "animated_gif_source"
+    webp_dir = target_dir / "animated_webp_submit"
+    preview_dir = target_dir / "preview_jpg"
+    for directory in [static_dir, gif_dir, webp_dir, preview_dir]:
+        directory.mkdir(parents=True, exist_ok=True)
+
+    request = BuildRequest(
+        character_name=str(report.get("character_name", action_plan.get("character_name", "수정재생성"))),
+        concept=str(report.get("concept", "")),
+        phrases=[],
+        base_color=color_or_default(str(report.get("base_color", "#ffd166")), "#ffd166"),
+        accent_color=color_or_default(str(report.get("accent_color", "#7fd8be")), "#7fd8be"),
+        character_style=str(report.get("character_style", "soft_bear"))
+        if str(report.get("character_style", "soft_bear")) in CHARACTER_STYLES
+        else "soft_bear",
+        workflow_mode=str(report.get("workflow_mode", "prototype_only"))
+        if str(report.get("workflow_mode", "prototype_only")) in WORKFLOW_MODES
+        else "prototype_only",
+        product_mode=product_mode if product_mode in PRODUCT_MODES else "standard_static",
+        auto_collect_research=False,
+    )
+
+    actions = [item for item in action_plan.get("actions", []) if isinstance(item, dict)]
+    regenerated_files: list[Path] = []
+    zip_files: list[Path] = []
+    regenerated_items: list[dict[str, object]] = []
+    optimization_records: list[dict[str, object]] = []
+    for action in actions:
+        try:
+            slot_number = int(str(action.get("slot", "0")))
+        except ValueError:
+            continue
+        if slot_number <= 0 or slot_number > len(phrase_plan):
+            continue
+        original_slot = phrase_plan[slot_number - 1] if isinstance(phrase_plan[slot_number - 1], dict) else {}
+        original_phrase = str(original_slot.get("phrase", action.get("phrase", "")))
+        emotion_key = str(original_slot.get("emotion_key", match_phrase_emotion(original_phrase, slot_number - 1)[0]))
+        phrase = action_phrase(original_phrase, emotion_key, action)
+        render_index = slot_number + 17
+        if slot_number <= static_count:
+            image, expression_variant = make_static_image(request, phrase, render_index, emotion_key)
+            image = fit_image_to_product(image, spec)
+            png_path = static_dir / f"regen_static_{slot_number:02d}.png"
+            jpg_path = preview_dir / f"regen_static_{slot_number:02d}.jpg"
+            optimization_records.append(save_optimized_png(image, png_path, int(spec["static_target_bytes"])))
+            image.save(jpg_path, "JPEG", quality=92)
+            regenerated_files.extend([png_path, jpg_path])
+            zip_files.append(png_path)
+            item_type = "static_png"
+            source_gif = ""
+            submit_file = png_path
+        else:
+            frames, expression_variant = make_animated_frames(request, phrase, render_index, static_count, emotion_key)
+            frames = fit_frames_to_product(frames, spec)
+            gif_path = gif_dir / f"regen_animated_{slot_number:02d}.gif"
+            webp_path = webp_dir / f"regen_animated_{slot_number:02d}.webp"
+            jpg_path = preview_dir / f"regen_animated_{slot_number:02d}.jpg"
+            optimization_records.append(save_optimized_gif(frames, gif_path, int(spec["animated_target_bytes"])))
+            optimization_records.append(save_optimized_webp(frames, webp_path, int(spec["animated_target_bytes"])))
+            frames[0].save(jpg_path, "JPEG", quality=92)
+            regenerated_files.extend([gif_path, webp_path, jpg_path])
+            zip_files.append(webp_path if webp_path.exists() else gif_path)
+            item_type = "animated_webp" if webp_path.exists() else "animated_gif"
+            source_gif = str(gif_path.relative_to(target_dir))
+            submit_file = webp_path if webp_path.exists() else gif_path
+        regenerated_items.append(
+            {
+                "slot": slot_number,
+                "type": item_type,
+                "original_phrase": original_phrase,
+                "regenerated_phrase": phrase,
+                "emotion_key": emotion_key,
+                "submit_file": str(submit_file.relative_to(target_dir)),
+                "source_gif_file": source_gif,
+                "preview_file": str(jpg_path.relative_to(target_dir)),
+                "expression_variant": json.dumps(expression_variant, ensure_ascii=False),
+                "source_action": action,
+            }
+        )
+
+    zip_path = target_dir / "action_regeneration_submit_candidates.zip"
+    write_zip(zip_path, zip_files, target_dir)
+    regen_report = {
+        "enabled": True,
+        "created_at": time.strftime("%Y%m%d_%H%M%S"),
+        "source_result": output_dir.name,
+        "source_action_plan": "review_action_plan.json",
+        "product_mode": product_mode,
+        "product_label": spec["label"],
+        "item_count": len(regenerated_items),
+        "zip": str(zip_path.relative_to(output_dir)),
+        "directory": str(target_dir.relative_to(output_dir)),
+        "optimization": optimization_summary(optimization_records),
+        "items": regenerated_items,
+        "safe_scope": "선택 컷만 내부 품질 개선용으로 재생성했습니다. 최종 제출 전 사람 검토와 직접 수정 기록이 필요합니다.",
+    }
+    write_json_file(target_dir / "action_regeneration_report.json", regen_report)
+    return regen_report
+
+
 def bytes_label(size: int) -> str:
     units = ["B", "KB", "MB", "GB"]
     value = float(max(size, 0))
@@ -3173,6 +3303,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     weak_cut_review = read_json_file(output_dir / "weak_cut_review.json", {})
     animation_quality = read_json_file(output_dir / "animation_quality_report.json", {})
     review_action_plan = read_json_file(output_dir / "review_action_plan.json", {})
+    action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3431,6 +3562,21 @@ def result_detail_page(name: str, message: str = "") -> str:
         if isinstance(review_action_plan, dict) and review_action_plan
         else "저장된 액션 없음"
     )
+    regen_items = action_regeneration.get("items", []) if isinstance(action_regeneration, dict) else []
+    regen_html = html_list(
+        [
+            f"#{item.get('slot', '')} {item.get('original_phrase', '')} -> {item.get('regenerated_phrase', '')} / {item.get('type', '')}"
+            for item in regen_items[:8]
+            if isinstance(item, dict)
+        ],
+        "아직 수정 재생성 결과가 없습니다.",
+    )
+    regen_summary = (
+        f"최근 재생성 {html.escape(str(action_regeneration.get('created_at', '')))} / "
+        f"{html.escape(str(action_regeneration.get('item_count', 0)))}개 컷"
+        if isinstance(action_regeneration, dict) and action_regeneration
+        else "재생성 결과 없음"
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3468,6 +3614,7 @@ def result_detail_page(name: str, message: str = "") -> str:
             link("증빙 ZIP", evidence.get("zip", "")),
             link("WebP 품질 리포트", output_dir / "animation_quality_report.json"),
             link("검토 액션 플랜", output_dir / "review_action_plan.json") if (output_dir / "review_action_plan.json").exists() else "",
+            link("수정 재생성 ZIP", output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip") if (output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip").exists() else "",
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -3644,6 +3791,16 @@ def result_detail_page(name: str, message: str = "") -> str:
       <div class="button-row">
         <button class="action-button" type="submit" name="focus" value="weak">선택 컷 수정 플랜 저장</button>
         <button class="action-button secondary" type="submit" name="focus" value="motion">움직임 검토 플랜 저장</button>
+      </div>
+    </form>
+    <hr>
+    <h2>수정 플랜 재생성</h2>
+    <p>{regen_summary}</p>
+    {regen_html}
+    <form class="action-form" method="post" action="/regenerate-action">
+      <input type="hidden" name="name" value="{html.escape(output_dir.name)}">
+      <div class="button-row">
+        <button class="action-button" type="submit">저장된 수정 플랜으로 재생성</button>
       </div>
     </form>
   </section>
@@ -5223,6 +5380,7 @@ def build_creator_evidence_package(
         output_dir / "animation_quality_report.json",
         output_dir / "weak_cut_review.json",
         output_dir / "review_action_plan.json",
+        output_dir / "action_regeneration" / "action_regeneration_report.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
@@ -5855,6 +6013,8 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "concept": request.concept,
         "character_style": request.character_style,
         "character_style_label": CHARACTER_STYLES.get(request.character_style, CHARACTER_STYLES["soft_bear"]),
+        "base_color": request.base_color,
+        "accent_color": request.accent_color,
         "workflow_mode": request.workflow_mode,
         "workflow_label": WORKFLOW_MODES.get(request.workflow_mode, WORKFLOW_MODES["prototype_only"]),
         "product_mode": request.product_mode,
@@ -6621,6 +6781,23 @@ class Handler(BaseHTTPRequestHandler):
                 ),
             )
             return
+        if self.path == "/regenerate-action":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            output_dir = safe_output_dir_by_name(form_value(form, "name", ""))
+            if output_dir is None:
+                self.respond(404, page(error="결과 폴더를 찾을 수 없습니다."))
+                return
+            regen = build_action_regeneration(output_dir)
+            self.respond(
+                200,
+                result_detail_page(
+                    output_dir.name,
+                    f"수정 플랜 기준으로 {regen.get('item_count', 0)}개 컷을 action_regeneration 폴더에 재생성했습니다.",
+                ),
+            )
+            return
         if self.path not in {"/build", "/research", "/learn"}:
             self.respond(404, page(error="Unknown route."))
             return
@@ -6702,6 +6879,7 @@ class Handler(BaseHTTPRequestHandler):
             ".jpeg": "image/jpeg",
             ".png": "image/png",
             ".gif": "image/gif",
+            ".webp": "image/webp",
             ".zip": "application/zip",
         }
         data = resolved.read_bytes()
