@@ -4,6 +4,7 @@ from ai_shorts.state import AppState, ShortProject
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
+from ai_shorts.web_app import _render_page
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -62,3 +63,9 @@ def test_local_script_draft_has_transformation_note() -> None:
     assert draft.title
     assert draft.scenes
     assert "복제하지 않고" in draft.transformation_note
+
+
+def test_web_app_renders_korean_workspace() -> None:
+    html = _render_page().decode("utf-8")
+    assert "새 쇼츠 초안" in html
+    assert "주간 2~3개 계획" in html

@@ -60,6 +60,7 @@ See `docs/REFERENCE_REVIEW.md` and `docs/REBUILD_BLUEPRINT.md`.
 - `src/ai_shorts/script_lab.py`: local script draft creation without paid API calls.
 - `src/ai_shorts/package_exporter.py`: manual upload package export with compliance report.
 - `src/ai_shorts/cli.py`: local CLI for first workflow checks.
+- `src/ai_shorts/web_app.py`: dependency-free local browser UI.
 
 The app must generate compliant draft packages first. Public upload automation is intentionally not enabled in phase 1.
 
@@ -74,6 +75,27 @@ python -m ai_shorts.cli plan-week --count 3 --topic "생활 팁" --topic "직장
 ```
 
 This creates autosaved local project data under `data/projects/`.
+
+## Local Browser UI
+
+From this folder:
+
+```powershell
+$env:PYTHONPATH='src'
+python -m ai_shorts.web_app
+```
+
+Open:
+
+```text
+http://127.0.0.1:8731
+```
+
+On Windows, you can also run:
+
+```bat
+START_WEB_APP.bat
+```
 
 ## Local Git Setup For This PC
 

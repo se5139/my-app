@@ -2,23 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict
 
-from .package_exporter import export_manual_upload_package
-from .script_lab import create_local_script_draft
-from .state import create_project, write_json
 from .weekly_planner import TopicInsight, create_weekly_plan
-from .paths import PROJECTS_DIR, ensure_data_dirs
+from .workflow import create_draft_package
 
 
 def command_new_draft(args: argparse.Namespace) -> None:
-    ensure_data_dirs()
-    project = create_project(args.topic, args.source_notes)
-    script = create_local_script_draft(args.topic, args.source_notes)
-    project_dir = PROJECTS_DIR / project.id
-    write_json(project_dir / "script_draft.json", script.to_dict())
-    result = export_manual_upload_package(project, script)
-    print(json.dumps({"project": asdict(project), "export": result}, ensure_ascii=False, indent=2))
+    result = create_draft_package(args.topic, args.source_notes)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def command_plan_week(args: argparse.Namespace) -> None:

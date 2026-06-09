@@ -74,6 +74,26 @@ Verification:
 - `python -m ai_shorts.cli new-draft "퇴근 후 시간 관리" ...` created a test package with compliance status `pass`.
 - Test-generated `data/` and Python cache folders were removed after verification so sample artifacts are not committed.
 
+## 2026-06-09 Local UI Step
+
+Added a dependency-free local browser UI:
+
+- `src/ai_shorts/workflow.py`: shared draft package workflow for CLI and web UI.
+- `src/ai_shorts/web_app.py`: local HTTP UI at `http://127.0.0.1:8731`.
+- `START_WEB_APP.ps1` and `START_WEB_APP.bat`: Windows launch helpers.
+
+Verification:
+
+- Python compile check passed.
+- Web workflow smoke test passed.
+- Local HTTP end-to-end check passed for page load, weekly plan form, and draft creation form.
+- In-app Browser plugin connection failed in this sandbox, so HTTP checks were used instead.
+
+Next recommended work:
+
+- Add a project detail screen that opens saved drafts and shows compliance report contents.
+- Then add actual video render placeholder generation.
+
 ## User Feature Direction Captured
 
 The user wants:
