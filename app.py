@@ -150,6 +150,17 @@ DEFAULT_PHRASES = [
     "놀자",
 ]
 
+SHORT_REACTION_BANK = {
+    "happy": ["좋아!", "굿!", "오예", "나이스", "대박"],
+    "thanks": ["고마워", "땡큐", "감사!", "덕분에", "최고야"],
+    "cheer": ["화이팅", "가자!", "할수있어", "힘내", "응원해"],
+    "sorry": ["미안해", "앗 미안", "괜찮아?", "쏘리", "잠깐만"],
+    "love": ["보고싶어", "좋아해", "하트!", "내맘", "안아줘"],
+    "surprise": ["헉!", "어머", "진짜?", "깜짝", "뭐야!"],
+    "rest": ["쉬자", "잠깐", "멍...", "괜찮아", "토닥"],
+    "party": ["축하해", "파티!", "짠!", "완전굿", "신난다"],
+}
+
 PHRASE_BANK = {
     "happy": ["좋아!", "완전 좋아", "기분 최고", "좋은데?", "히히 좋아", "나이스", "행복해", "웃자"],
     "thanks": ["고마워", "덕분이야", "감사해", "마음 받았어", "진짜 고마워", "센스 최고", "고마운 마음", "감동이야"],
@@ -337,7 +348,7 @@ def phrase_for_slot(user_phrases: list[str], emotion_key: str, slot_index: int) 
     cleaned_user_phrases = [normalize_phrase(phrase) for phrase in user_phrases if normalize_phrase(phrase)]
     if slot_index < len(cleaned_user_phrases):
         return cleaned_user_phrases[slot_index], "user"
-    bank = PHRASE_BANK.get(emotion_key, DEFAULT_PHRASES)
+    bank = SHORT_REACTION_BANK.get(emotion_key, PHRASE_BANK.get(emotion_key, DEFAULT_PHRASES))
     bank_index = (slot_index - len(cleaned_user_phrases)) % len(bank)
     return bank[bank_index], "auto"
 
@@ -417,12 +428,17 @@ def suggest_shorter_phrase(phrase: str) -> str:
 
 
 def safe_phrase_candidates(emotion_key: str, used_phrases: set[str], limit: int = 3) -> list[str]:
-    bank = PHRASE_BANK.get(emotion_key, DEFAULT_PHRASES)
+    bank = [
+        *SHORT_REACTION_BANK.get(emotion_key, []),
+        *PHRASE_BANK.get(emotion_key, DEFAULT_PHRASES),
+    ]
     candidates: list[str] = []
     for phrase in bank:
         if compact_phrase_key(phrase) in used_phrases:
             continue
         if any(keyword.lower() in phrase.lower() for keyword in PHRASE_RISK_KEYWORDS):
+            continue
+        if phrase in candidates:
             continue
         candidates.append(phrase)
         if len(candidates) >= limit:
@@ -434,6 +450,81 @@ def safe_phrase_candidates(emotion_key: str, used_phrases: set[str], limit: int 
             if len(candidates) >= limit:
                 break
     return candidates
+
+
+def expression_diversity_summary(expression_plan: list[dict[str, str]]) -> dict[str, object]:
+    emotion_counts: dict[str, int] = {}
+    gesture_counts: dict[str, int] = {}
+    variant_ids: set[str] = set()
+    for item in expression_plan:
+        emotion_key = str(item.get("emotion_key", "unknown"))
+        emotion_counts[emotion_key] = emotion_counts.get(emotion_key, 0) + 1
+        try:
+            variant = json.loads(str(item.get("expression_variant", "{}")))
+        except Exception:
+            variant = {}
+        gesture = str(variant.get("gesture", "unknown")) if isinstance(variant, dict) else "unknown"
+        variant_id = str(variant.get("variant_id", "")) if isinstance(variant, dict) else ""
+        gesture_counts[gesture] = gesture_counts.get(gesture, 0) + 1
+        if variant_id:
+            variant_ids.add(variant_id)
+    return {
+        "enabled": True,
+        "emotion_type_count": len(emotion_counts),
+        "gesture_type_count": len(gesture_counts),
+        "variant_type_count": len(variant_ids),
+        "emotion_counts": emotion_counts,
+        "gesture_counts": gesture_counts,
+        "rule": "같은 감정도 컷 번호에 따라 눈, 입, 볼, 손동작 변주를 섞어 반복감을 줄입니다.",
+    }
+
+
+def build_next_generation_direction(
+    phrase_quality: dict[str, object],
+    replacements: dict[str, object],
+    expression_diversity: dict[str, object],
+    readiness: dict[str, object],
+) -> dict[str, object]:
+    directions = [
+        {
+            "title": "짧은 리액션 문구 강화",
+            "action": "10자 안팎의 즉시 반응 문구를 우선 후보로 쓰고, 긴 설명형 문장은 수정판에서 줄입니다.",
+        },
+        {
+            "title": "표정/손동작 차이 확대",
+            "action": "같은 감정에서도 손 위치, 입 모양, 볼 효과를 다르게 배치해 컷별 구분감을 키웁니다.",
+        },
+        {
+            "title": "검토 화면은 구조만 참고",
+            "action": "편하게 비교하는 UX만 참고하고, 타 작가 캐릭터/문구/구도/브랜드 표현은 복제하지 않습니다.",
+        },
+        {
+            "title": "제출 전 사람 수정 기록 보강",
+            "action": "러프, 원본 레이어, 수정 캡처, 권리 메모를 함께 보관해 직접 제작 흐름을 남깁니다.",
+        },
+    ]
+    if int(phrase_quality.get("warn_count", 0) or 0) or int(phrase_quality.get("fail_count", 0) or 0):
+        directions.insert(
+            0,
+            {
+                "title": "문구 재검토 우선",
+                "action": f"대체 문구 후보 {replacements.get('suggestion_count', 0)}개를 확인하고 캐릭터 말투에 맞게 직접 다듬으세요.",
+            },
+        )
+    if int(expression_diversity.get("gesture_type_count", 0) or 0) < 6:
+        directions.append(
+            {
+                "title": "동작 팔레트 추가",
+                "action": "다음 생성에서는 손 흔들기, 끄덕임, 놀람, 응원 동작을 더 섞어 화면 스캔성이 좋아지게 만듭니다.",
+            }
+        )
+    return {
+        "enabled": True,
+        "review_model": "스토어형 빠른 검토 구조 참고",
+        "legal_boundary": "참고 자료는 UX와 검토 흐름에만 사용하고, 캐릭터/문구/구도/그림체 복제는 금지합니다.",
+        "readiness_decision": readiness.get("decision_label", ""),
+        "directions": directions[:8],
+    }
 
 
 def build_phrase_replacement_suggestions(
@@ -2839,6 +2930,14 @@ def result_detail_page(name: str) -> str:
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
     gallery = report.get("preview_gallery", {}) if isinstance(report.get("preview_gallery", {}), dict) else {}
     revised = report.get("revised_phrase_variant", {}) if isinstance(report.get("revised_phrase_variant", {}), dict) else {}
+    phrase_plan_data = read_json_file(output_dir / "phrase_plan.json", [])
+    phrase_plan = phrase_plan_data if isinstance(phrase_plan_data, list) else []
+    expression_diversity = report.get("expression_diversity", {})
+    if not isinstance(expression_diversity, dict):
+        expression_diversity = {}
+    next_direction = report.get("next_generation_direction", {})
+    if not isinstance(next_direction, dict):
+        next_direction = {}
 
     def link(label: str, path_value: object) -> str:
         value = str(path_value or "")
@@ -2883,7 +2982,7 @@ def result_detail_page(name: str) -> str:
     def file_href(path: Path) -> str:
         return "/" + str(path).replace("\\", "/")
 
-    def preview_pair_html(limit: int = 8) -> str:
+    def review_grid_html(limit: int = 32) -> str:
         original_files = sorted((output_dir / "preview_jpg").glob("*.jpg"))[:limit]
         revised_files = sorted((output_dir / "revised_phrase_variant" / "preview_jpg").glob("*.jpg"))[:limit]
         if not original_files and not revised_files:
@@ -2891,6 +2990,10 @@ def result_detail_page(name: str) -> str:
         cards: list[str] = []
         max_count = max(len(original_files), len(revised_files))
         for index in range(max_count):
+            phrase_slot = phrase_plan[index] if index < len(phrase_plan) and isinstance(phrase_plan[index], dict) else {}
+            phrase = str(phrase_slot.get("phrase", ""))
+            emotion_label = str(phrase_slot.get("emotion", ""))
+            source = str(phrase_slot.get("source", ""))
             original = original_files[index] if index < len(original_files) else None
             revised_preview = revised_files[index] if index < len(revised_files) else None
             original_img = (
@@ -2905,18 +3008,20 @@ def result_detail_page(name: str) -> str:
             )
             cards.append(
                 f"""
-                <div class="thumb-card">
-                  <div class="thumb-title">#{index + 1:02d}</div>
+                <div class="review-card">
+                  <div class="review-title"><strong>#{index + 1:02d}</strong><span>{html.escape(emotion_label or "감정 미확인")}</span></div>
                   <div class="thumb-pair">
                     <div><span>원본</span>{original_img}</div>
                     <div><span>수정본</span>{revised_img}</div>
                   </div>
+                  <p class="review-phrase">{html.escape(phrase or "문구 없음")}</p>
+                  <p class="review-meta">출처 {html.escape(source or "-")} · 컷별 표정/손동작 변주 적용</p>
                 </div>
                 """
             )
         return "".join(cards)
 
-    preview_pairs_html = preview_pair_html()
+    review_grid_cards_html = review_grid_html()
 
     validation_issues = validation.get("issues", []) if isinstance(validation, dict) else []
     validation_rules = validation.get("rules", {}) if isinstance(validation, dict) else {}
@@ -2976,6 +3081,16 @@ def result_detail_page(name: str) -> str:
         ],
         "대체 문구 제안이 없습니다.",
     )
+    direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
+    direction_html = html_list(
+        [
+            f"{item.get('title', '')}: {item.get('action', '')}"
+            for item in direction_items
+            if isinstance(item, dict)
+        ],
+        "다음 생성 방향 정보가 없습니다.",
+    )
+    legal_boundary = str(next_direction.get("legal_boundary", "참고 자료는 검토 UX 흐름에만 사용하고 표현 복제는 금지합니다."))
     apply_items = revised_apply.get("applied", []) if isinstance(revised_apply, dict) else []
     apply_html = html_list(
         [
@@ -3038,8 +3153,13 @@ def result_detail_page(name: str) -> str:
     .verdict.danger {{ border-left-color:#df8d75; }}
     .legacy-metrics {{ display:none; }}
     .verdict + .grid + .grid {{ display:none; }}
-    .thumb-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }}
-    .thumb-card {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:20px; padding:12px; }}
+    .thumb-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }}
+    .review-card {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:20px; padding:12px; }}
+    .review-title {{ display:flex; justify-content:space-between; gap:8px; align-items:center; font-weight:900; color:#2d2424; margin-bottom:8px; }}
+    .review-title span {{ color:#6f625f; font-size:13px; }}
+    .review-phrase {{ margin:10px 0 4px; color:#2d2424; font-weight:900; }}
+    .review-meta {{ margin:0; font-size:12px; color:#8a7b70; }}
+    .direction-note {{ padding:14px 16px; border-radius:18px; background:#fff3d8; border:1px solid #f2cc80; color:#6b4c16; font-weight:800; }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .thumb-pair {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .thumb-pair span {{ display:block; font-weight:900; font-size:12px; color:#6f625f; margin-bottom:6px; }}
@@ -3078,6 +3198,7 @@ def result_detail_page(name: str) -> str:
     <div class="metric {tone(readiness_label)}"><span>제출 준비 점수</span><strong>{html.escape(str(readiness_score))}</strong><p>{html.escape(str(readiness_label))}</p></div>
     <div class="metric {tone(phrase_status)}"><span>문구 품질</span><strong>{html.escape(str(phrase_status))}</strong><p>{html.escape(str(phrase_score))}점</p></div>
     <div class="metric {tone(revised_status)}"><span>수정본 품질</span><strong>{html.escape(str(revised_status))}</strong><p>{html.escape(str(revised_score))}점 / 변경 {html.escape(str(revised.get("refinement_change_count", 0)))}개</p></div>
+    <div class="metric neutral"><span>표정/손동작 다양성</span><strong>{html.escape(str(expression_diversity.get("variant_type_count", "")))}</strong><p>감정 {html.escape(str(expression_diversity.get("emotion_type_count", "")))}종 / 손동작 {html.escape(str(expression_diversity.get("gesture_type_count", "")))}종</p></div>
   </section>
   <section class="grid">
     <div class="metric"><span>자동 검사</span><strong>{html.escape(str(report.get("validation_status", "")))}</strong></div>
@@ -3104,11 +3225,16 @@ def result_detail_page(name: str) -> str:
     {risk_html}
   </section>
   <section class="panel">
-    <h2>원본 vs 수정본 빠른 미리보기</h2>
-    <p>상세 갤러리를 열기 전에 대표 컷을 바로 비교합니다. 이미지를 누르면 크게 열 수 있습니다.</p>
+    <h2>스토어형 빠른 검토 그리드</h2>
+    <p>대표 컷이 아니라 전체 흐름을 빠르게 훑어보는 검토용 화면입니다. 구조만 참고하며, 캐릭터와 표현은 독자 스타일로 유지합니다.</p>
     <div class="thumb-grid">
-      {preview_pairs_html}
+      {review_grid_cards_html}
     </div>
+  </section>
+  <section class="panel">
+    <h2>비슷한 스타일 / 다음 생성 방향</h2>
+    <p class="direction-note">{html.escape(legal_boundary)}</p>
+    {direction_html}
   </section>
   <section class="panel">
     <h2>제출 준비 세부 체크</h2>
@@ -3325,66 +3451,197 @@ def draw_emotion_effect(draw: ImageDraw.ImageDraw, emotion: dict[str, object], i
             draw.rounded_rectangle((x, y, x + 10, y + 16), radius=3, fill=colors[n % len(colors)])
 
 
-def expression_variant_for_emotion(emotion_key: str) -> dict[str, object]:
+def expression_variant_for_emotion(emotion_key: str, variant_index: int = 0) -> dict[str, object]:
     variants = {
-        "happy": {
+        "happy": [
+            {
             "eyes": "smile",
             "mouth": "wide_smile",
             "cheeks": "bright",
             "gesture": "tiny_up_hands",
             "description": "웃는 눈, 큰 미소, 밝은 볼",
-        },
-        "thanks": {
+            },
+            {
+                "eyes": "soft",
+                "mouth": "wide_smile",
+                "cheeks": "heart",
+                "gesture": "celebrate",
+                "description": "부드러운 웃는 눈, 큰 미소, 작은 만세",
+            },
+            {
+                "eyes": "smile",
+                "mouth": "small_smile",
+                "cheeks": "bright",
+                "gesture": "hug",
+                "description": "웃는 눈, 작은 미소, 포옹 손",
+            },
+        ],
+        "thanks": [
+            {
             "eyes": "soft",
             "mouth": "small_smile",
             "cheeks": "heart",
             "gesture": "bow_hands",
             "description": "부드러운 눈, 작은 미소, 감사 하트",
-        },
-        "cheer": {
+            },
+            {
+                "eyes": "smile",
+                "mouth": "small_smile",
+                "cheeks": "soft",
+                "gesture": "folded_hands",
+                "description": "웃는 눈, 차분한 미소, 모은 손",
+            },
+            {
+                "eyes": "soft",
+                "mouth": "wide_smile",
+                "cheeks": "heart",
+                "gesture": "tiny_up_hands",
+                "description": "부드러운 눈, 감사 미소, 살짝 든 손",
+            },
+        ],
+        "cheer": [
+            {
             "eyes": "determined",
             "mouth": "open_cheer",
             "cheeks": "energy",
             "gesture": "fists",
             "description": "힘찬 눈썹, 응원 입모양, 주먹 보조선",
-        },
-        "sorry": {
+            },
+            {
+                "eyes": "smile",
+                "mouth": "open_cheer",
+                "cheeks": "bright",
+                "gesture": "raised_hands",
+                "description": "밝은 응원 눈, 열린 입, 번쩍 손",
+            },
+            {
+                "eyes": "determined",
+                "mouth": "wide_smile",
+                "cheeks": "energy",
+                "gesture": "celebrate",
+                "description": "단단한 눈, 큰 미소, 축하 손",
+            },
+        ],
+        "sorry": [
+            {
             "eyes": "downcast",
             "mouth": "worried",
             "cheeks": "pale",
             "gesture": "folded_hands",
             "description": "처진 눈, 미안한 입, 모은 손",
-        },
-        "love": {
+            },
+            {
+                "eyes": "soft",
+                "mouth": "small_smile",
+                "cheeks": "pale",
+                "gesture": "bow_hands",
+                "description": "부드러운 눈, 조심스러운 미소, 숙인 손",
+            },
+            {
+                "eyes": "downcast",
+                "mouth": "calm",
+                "cheeks": "soft",
+                "gesture": "hug",
+                "description": "처진 눈, 차분한 입, 조심스러운 포옹 손",
+            },
+        ],
+        "love": [
+            {
             "eyes": "heart",
             "mouth": "soft_smile",
             "cheeks": "deep_blush",
             "gesture": "hug",
             "description": "하트 눈, 진한 볼, 포옹 보조선",
-        },
-        "surprise": {
+            },
+            {
+                "eyes": "smile",
+                "mouth": "wide_smile",
+                "cheeks": "heart",
+                "gesture": "tiny_up_hands",
+                "description": "웃는 눈, 큰 애정 미소, 살짝 든 손",
+            },
+            {
+                "eyes": "heart",
+                "mouth": "small_smile",
+                "cheeks": "deep_blush",
+                "gesture": "folded_hands",
+                "description": "하트 눈, 작은 미소, 모은 손",
+            },
+        ],
+        "surprise": [
+            {
             "eyes": "wide",
             "mouth": "round",
             "cheeks": "none",
             "gesture": "raised_hands",
             "description": "동그란 눈, 놀란 입, 번쩍 손",
-        },
-        "rest": {
+            },
+            {
+                "eyes": "wide",
+                "mouth": "open_cheer",
+                "cheeks": "pale",
+                "gesture": "tiny_up_hands",
+                "description": "큰 눈, 열린 입, 움찔 손",
+            },
+            {
+                "eyes": "soft",
+                "mouth": "round",
+                "cheeks": "soft",
+                "gesture": "folded_hands",
+                "description": "부드러운 놀람 눈, 동그란 입, 모은 손",
+            },
+        ],
+        "rest": [
+            {
             "eyes": "sleepy",
             "mouth": "calm",
             "cheeks": "soft",
             "gesture": "blanket",
             "description": "졸린 눈, 차분한 입, 휴식 보조선",
-        },
-        "party": {
+            },
+            {
+                "eyes": "soft",
+                "mouth": "small_smile",
+                "cheeks": "soft",
+                "gesture": "hug",
+                "description": "부드러운 눈, 쉬는 미소, 감싸는 손",
+            },
+            {
+                "eyes": "sleepy",
+                "mouth": "soft_smile",
+                "cheeks": "pale",
+                "gesture": "folded_hands",
+                "description": "졸린 눈, 편한 미소, 모은 손",
+            },
+        ],
+        "party": [
+            {
             "eyes": "star",
             "mouth": "open_party",
             "cheeks": "bright",
             "gesture": "celebrate",
             "description": "별 눈, 축하 입모양, 만세 보조선",
-        },
+            },
+            {
+                "eyes": "smile",
+                "mouth": "open_party",
+                "cheeks": "energy",
+                "gesture": "raised_hands",
+                "description": "웃는 눈, 파티 입모양, 번쩍 손",
+            },
+            {
+                "eyes": "star",
+                "mouth": "wide_smile",
+                "cheeks": "bright",
+                "gesture": "fists",
+                "description": "별 눈, 큰 미소, 신난 주먹",
+            },
+        ],
     }
-    return variants.get(emotion_key, variants["happy"])
+    family = variants.get(emotion_key, variants["happy"])
+    selected = dict(family[variant_index % len(family)])
+    selected["variant_id"] = f"{emotion_key}_{variant_index % len(family) + 1}"
+    return selected
 
 
 def draw_expression_overlay(
@@ -3395,7 +3652,7 @@ def draw_expression_overlay(
     frame_index: int = 0,
 ) -> dict[str, object]:
     emotion_key = str(emotion.get("key", "happy"))
-    variant = expression_variant_for_emotion(emotion_key)
+    variant = expression_variant_for_emotion(emotion_key, index + frame_index)
     cx = 180
     eye_y = 142 + bounce
     mouth_y = 184 + bounce
@@ -3511,6 +3768,7 @@ def draw_expression_overlay(
         "cheeks": variant["cheeks"],
         "gesture": variant["gesture"],
         "description": variant["description"],
+        "variant_id": variant["variant_id"],
     }
 
 
@@ -4322,6 +4580,7 @@ def build_creator_evidence_package(
         output_dir / "sketch_consistency_report.json",
         output_dir / "phrase_quality_report.json",
         output_dir / "phrase_replacement_suggestions.json",
+        output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
         output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json",
@@ -4830,6 +5089,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
             }
         )
 
+    expression_diversity = expression_diversity_summary(expression_plan)
     zip_name = f"{guidance['zip_prefix']}_png_gif.zip"
     zip_path = output_dir / zip_name
     optimization = optimization_summary(optimization_records)
@@ -4869,6 +5129,12 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         human_origin_checklist,
         phrase_quality,
     )
+    next_generation_direction = build_next_generation_direction(
+        phrase_quality,
+        phrase_replacements,
+        expression_diversity,
+        submission_readiness,
+    )
 
     report = {
         "app": APP_NAME,
@@ -4886,11 +5152,15 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "sketch_consistency": sketch_consistency,
         "expression_variation": {
             "enabled": True,
-            "method": "emotion_overlay",
+            "method": "emotion_overlay_with_slot_variants",
             "applies_to": ["uploaded_sketch", "default_character"],
             "features": ["eyes", "mouth", "cheeks", "gesture", "effect"],
+            "emotion_type_count": expression_diversity["emotion_type_count"],
+            "gesture_type_count": expression_diversity["gesture_type_count"],
+            "variant_type_count": expression_diversity["variant_type_count"],
             "report_file": "expression_plan.json",
         },
+        "expression_diversity": expression_diversity,
         "phrase_emotion_matching": emotion_matching,
         "phrase_quality": {
             "status": phrase_quality["status"],
@@ -4945,6 +5215,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
         "validation_status": validation["status"],
         "validation_fail_count": validation["fail_count"],
         "validation_warn_count": validation["warn_count"],
+        "next_generation_direction": next_generation_direction,
         "notes": [
             "PNG/GIF only ZIP was created.",
             "JPG files are previews only and are not included in the submit ZIP.",
@@ -4953,6 +5224,7 @@ def build_package(request: BuildRequest) -> dict[str, object]:
             "Memory phrase weights are applied before default phrase suggestions.",
             "Prototype-only outputs are reference material and should not be submitted as final Kakao artwork.",
             "Real submissions should be based on human-created source artwork and retained creation evidence.",
+            "Reference videos or store screens are used only for broad review UX patterns, never for copying characters, phrases, compositions, or brand expressions.",
         ],
     }
     (output_dir / "build_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -4970,6 +5242,10 @@ def build_package(request: BuildRequest) -> dict[str, object]:
     )
     (output_dir / "expression_plan.json").write_text(
         json.dumps(expression_plan, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "next_generation_direction.json").write_text(
+        json.dumps(next_generation_direction, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     (output_dir / "phrase_plan.json").write_text(
