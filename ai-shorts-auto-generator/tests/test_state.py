@@ -99,3 +99,5 @@ def test_render_placeholder_plan_shape(tmp_path) -> None:
     assert plan["status"] == "placeholder_ready"
     assert plan["scene_count"] == len(draft.scenes)
     assert (tmp_path / "renders" / "placeholder" / "render_plan.json").exists()
+    assert (tmp_path / "renders" / "placeholder" / "render_manifest.json").exists()
+    assert (tmp_path / "renders" / "placeholder" / "timeline.html").exists()

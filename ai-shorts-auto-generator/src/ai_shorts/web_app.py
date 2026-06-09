@@ -131,6 +131,8 @@ def _render_project_detail(project_id: str) -> str:
     )
     if not render_rows:
         render_rows = '<tr><td colspan="4" class="muted">아직 렌더 placeholder가 없습니다.</td></tr>'
+    timeline_html = render_plan.get("timeline_html", "") if isinstance(render_plan, dict) else ""
+    render_manifest = render_plan.get("render_manifest", "") if isinstance(render_plan, dict) else ""
 
     return f"""
     <section class="band detail-head">
@@ -229,6 +231,16 @@ def _render_project_detail(project_id: str) -> str:
           <span class="muted">상태: {_escape(render_plan.get('status', 'not_created'))}</span>
         </div>
       </form>
+      <div class="grid two">
+        <div>
+          <label>타임라인 HTML</label>
+          <p><code>{_escape(timeline_html or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>렌더 manifest</label>
+          <p><code>{_escape(render_manifest or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+      </div>
       <table><thead><tr><th>#</th><th>자막</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
     </section>
 

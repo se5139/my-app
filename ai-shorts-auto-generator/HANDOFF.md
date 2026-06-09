@@ -169,6 +169,24 @@ Next recommended work:
 - Add simple MP4 render from the generated SVG/placeholders.
 - Then add render review and export status.
 
+## 2026-06-09 Render Review Package Step
+
+Extended placeholder rendering into a reviewable render package:
+
+- `timeline.html` shows all generated scene SVGs in order with durations and visual directions.
+- `render_manifest.json` records the review entry point, render plan, assets, and package status.
+- Detail screen now shows timeline and manifest paths alongside scene SVG files.
+
+Verification target:
+
+- Compile render and web modules.
+- Generate placeholders and verify `render_plan.json`, `render_manifest.json`, `timeline.html`, and `scene_01.svg` exist.
+
+Next recommended work:
+
+- Add simple MP4 render from the generated SVG/placeholders.
+- Then add render review and export status.
+
 ## User Feature Direction Captured
 
 The user wants:
