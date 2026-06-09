@@ -5,6 +5,7 @@ cd /d "%~dp0"
 set "APP_DIR=%~dp0"
 set "PORT=8520"
 set "PY_CMD="
+if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
 
 title Kakao Emoticon v100 Launcher
 
@@ -16,12 +17,18 @@ echo [v100] APP_DIR=%APP_DIR%
 echo [v100] PORT=%PORT%
 echo.
 
-where py >nul 2>nul
-if not errorlevel 1 set "PY_CMD=py -3"
+if "%PY_CMD%"=="" (
+  where py >nul 2>nul
+  if not errorlevel 1 set "PY_CMD=py -3"
+)
 
 if "%PY_CMD%"=="" (
   where python >nul 2>nul
   if not errorlevel 1 set "PY_CMD=python"
+)
+
+if "%PY_CMD%"=="" (
+  if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PY_CMD=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 )
 
 if "%PY_CMD%"=="" (

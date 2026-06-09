@@ -33,6 +33,9 @@ _github_upload/
 _deliverables_v90/
 kakao_emoticon_v100_clean/
 github_backup/
+tools/
+my-app/
+my-app-zip-backup/
 
 # Secrets and local config
 .env
