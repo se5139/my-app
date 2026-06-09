@@ -2914,7 +2914,106 @@ def build_final_candidates(output_dir: Path, selections: dict[str, str]) -> dict
     }
     write_json_file(target_dir / "final_candidates_report.json", final_report)
     write_json_file(target_dir / "final_candidates_validation_report.json", validation)
+    final_report["audit"] = build_final_candidate_audit(output_dir)
+    write_json_file(target_dir / "final_candidates_report.json", final_report)
     return final_report
+
+
+def build_final_candidate_audit(output_dir: Path) -> dict[str, object]:
+    final_dir = output_dir / "final_candidates"
+    final_report = read_json_file(final_dir / "final_candidates_report.json", {})
+    validation = read_json_file(final_dir / "final_candidates_validation_report.json", {})
+    if not isinstance(final_report, dict):
+        final_report = {}
+    if not isinstance(validation, dict):
+        validation = {}
+    product_mode = str(final_report.get("product_mode", "standard_static"))
+    spec = product_mode_spec(product_mode)
+    expected_size = int(spec.get("canvas_px", CANVAS_SIZE))
+    static_limit = int(spec.get("static_target_bytes", 150 * 1024))
+    animated_limit = int(spec.get("animated_target_bytes", ANIMATED_SUBMISSION_MAX_BYTES))
+    items = [item for item in final_report.get("items", []) if isinstance(item, dict)]
+    files: list[dict[str, object]] = []
+    for item in items:
+        rel_file = str(item.get("file", ""))
+        file_path = final_dir / rel_file
+        suffix = file_path.suffix.lower()
+        expected_format = "PNG" if suffix == ".png" else "WEBP" if suffix == ".webp" else "GIF" if suffix == ".gif" else ""
+        limit = static_limit if suffix == ".png" else animated_limit
+        info: dict[str, object] = {
+            "slot": item.get("slot", ""),
+            "choice": item.get("choice", ""),
+            "phrase": item.get("phrase", ""),
+            "file": rel_file,
+            "exists": file_path.is_file(),
+            "bytes": file_size(file_path) if file_path.is_file() else 0,
+            "bytes_label": bytes_label(file_size(file_path)) if file_path.is_file() else "0 B",
+            "target_bytes": limit,
+            "target_met": bool(file_path.is_file() and file_size(file_path) <= limit),
+            "format": "",
+            "expected_format": expected_format,
+            "width": 0,
+            "height": 0,
+            "frame_count": 0,
+            "status": "missing",
+            "issues": [],
+        }
+        issues: list[str] = []
+        if not file_path.is_file():
+            issues.append("파일 없음")
+        else:
+            try:
+                with Image.open(file_path) as image:
+                    info["format"] = str(image.format or "")
+                    info["width"], info["height"] = image.size
+                    info["frame_count"] = int(getattr(image, "n_frames", 1) or 1)
+                    if image.size != (expected_size, expected_size):
+                        issues.append(f"크기 {image.size[0]}x{image.size[1]} / 필요 {expected_size}x{expected_size}")
+                    if expected_format and image.format != expected_format:
+                        issues.append(f"형식 {image.format} / 필요 {expected_format}")
+            except Exception as exc:
+                issues.append(f"열기 실패: {type(exc).__name__}")
+            if int(info["bytes"]) > limit:
+                issues.append(f"용량 초과 {info['bytes_label']} / 목표 {bytes_label(limit)}")
+        info["issues"] = issues
+        info["status"] = "pass" if not issues else "review"
+        files.append(info)
+
+    zip_path = final_dir / "final_candidates_submit.zip"
+    zip_entries: list[str] = []
+    zip_issues: list[str] = []
+    if zip_path.exists():
+        try:
+            with zipfile.ZipFile(zip_path) as archive:
+                zip_entries = archive.namelist()
+                corrupt = archive.testzip()
+            if corrupt:
+                zip_issues.append(f"ZIP 손상 항목: {corrupt}")
+        except Exception as exc:
+            zip_issues.append(f"ZIP 열기 실패: {type(exc).__name__}")
+    else:
+        zip_issues.append("ZIP 파일 없음")
+
+    review_count = sum(1 for item in files if item.get("status") != "pass")
+    audit = {
+        "enabled": True,
+        "created_at": time.strftime("%Y%m%d_%H%M%S"),
+        "status": "pass" if review_count == 0 and not zip_issues and validation.get("status") == "pass" else "review",
+        "product_label": spec["label"],
+        "expected_canvas_px": expected_size,
+        "file_count": len(files),
+        "review_count": review_count,
+        "zip": str(zip_path.relative_to(output_dir)) if zip_path.exists() else "",
+        "zip_entry_count": len([entry for entry in zip_entries if not entry.endswith("/")]),
+        "zip_issues": zip_issues,
+        "validation_status": validation.get("status", ""),
+        "validation_fail_count": validation.get("fail_count", 0),
+        "validation_warn_count": validation.get("warn_count", 0),
+        "files": files,
+        "safe_scope": "최종 후보 ZIP은 자동 검수 결과이며, 실제 제출 전 사람 검토와 직접 제작 증빙 확인이 필요합니다.",
+    }
+    write_json_file(final_dir / "final_candidates_audit_report.json", audit)
+    return audit
 
 
 def bytes_label(size: int) -> str:
@@ -3435,6 +3534,7 @@ def result_detail_page(name: str, message: str = "") -> str:
     review_action_plan = read_json_file(output_dir / "review_action_plan.json", {})
     action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
     final_candidates = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
+    final_audit = read_json_file(output_dir / "final_candidates" / "final_candidates_audit_report.json", {})
     revised_apply = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json", {})
     revised_refine = read_json_file(output_dir / "revised_phrase_variant" / "revised_phrase_refinement_report.json", {})
     evidence = report.get("creator_evidence_package", {}) if isinstance(report.get("creator_evidence_package", {}), dict) else {}
@@ -3765,6 +3865,40 @@ def result_detail_page(name: str, message: str = "") -> str:
         if isinstance(final_candidates, dict) and final_candidates
         else "최종 후보 묶음 없음"
     )
+    final_audit_files = final_audit.get("files", []) if isinstance(final_audit, dict) else []
+    final_audit_status = final_audit.get("status", "미생성") if isinstance(final_audit, dict) else "미생성"
+    final_audit_rows = "".join(
+        f"""
+        <tr>
+          <td>#{html.escape(str(item.get("slot", "")))}</td>
+          <td>{html.escape(str(item.get("choice", "")))}</td>
+          <td>{html.escape(str(item.get("format", "")))} {html.escape(str(item.get("width", 0)))}x{html.escape(str(item.get("height", 0)))}</td>
+          <td>{html.escape(str(item.get("bytes_label", "")))}</td>
+          <td>{html.escape(str(item.get("frame_count", 0)))}</td>
+          <td>{badge("상태", item.get("status", ""))}</td>
+          <td>{html.escape(", ".join(str(issue) for issue in item.get("issues", [])[:2]) or "-")}</td>
+        </tr>
+        """
+        for item in final_audit_files[:60]
+        if isinstance(item, dict)
+    )
+    final_audit_html = (
+        f"""
+        <div class="audit-summary">
+          <div class="metric {tone(final_audit_status)}"><span>최종 ZIP 검수</span><strong>{html.escape(str(final_audit_status))}</strong><p>파일 {html.escape(str(final_audit.get("file_count", 0)))} / 재검토 {html.escape(str(final_audit.get("review_count", 0)))}</p></div>
+          <div class="metric {tone(final_audit.get("validation_status", ""))}"><span>규격 검증</span><strong>{html.escape(str(final_audit.get("validation_status", "")))}</strong><p>실패 {html.escape(str(final_audit.get("validation_fail_count", 0)))} / 경고 {html.escape(str(final_audit.get("validation_warn_count", 0)))}</p></div>
+          <div class="metric neutral"><span>ZIP 항목</span><strong>{html.escape(str(final_audit.get("zip_entry_count", 0)))}</strong><p>{html.escape(str(final_audit.get("product_label", "")))}</p></div>
+        </div>
+        <div class="table-wrap">
+          <table class="audit-table">
+            <thead><tr><th>컷</th><th>선택</th><th>규격</th><th>용량</th><th>프레임</th><th>상태</th><th>이슈</th></tr></thead>
+            <tbody>{final_audit_rows or "<tr><td colspan='7'>최종 후보 감사 리포트가 없습니다.</td></tr>"}</tbody>
+          </table>
+        </div>
+        """
+        if isinstance(final_audit, dict) and final_audit
+        else "<p>최종 후보 ZIP을 만들면 파일별 상세 검수표가 표시됩니다.</p>"
+    )
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -3804,6 +3938,7 @@ def result_detail_page(name: str, message: str = "") -> str:
             link("검토 액션 플랜", output_dir / "review_action_plan.json") if (output_dir / "review_action_plan.json").exists() else "",
             link("수정 재생성 ZIP", output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip") if (output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip").exists() else "",
             link("최종 후보 ZIP", output_dir / "final_candidates" / "final_candidates_submit.zip") if (output_dir / "final_candidates" / "final_candidates_submit.zip").exists() else "",
+            link("최종 후보 검수 리포트", output_dir / "final_candidates" / "final_candidates_audit_report.json") if (output_dir / "final_candidates" / "final_candidates_audit_report.json").exists() else "",
             link("빌드 리포트", output_dir / "build_report.json"),
         ]
         if item
@@ -3875,6 +4010,12 @@ def result_detail_page(name: str, message: str = "") -> str:
     .button-row {{ display:flex; flex-wrap:wrap; gap:10px; }}
     button.action-button {{ border:0; border-radius:999px; padding:12px 16px; font-weight:900; background:#7fd8be; color:#1e3830; cursor:pointer; }}
     button.action-button.secondary {{ background:#fff3d8; color:#6b4c16; border:1px solid #f2cc80; }}
+    .audit-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:12px 0; }}
+    .table-wrap {{ width:100%; overflow-x:auto; }}
+    .audit-table {{ width:100%; border-collapse:separate; border-spacing:0; min-width:760px; }}
+    .audit-table th, .audit-table td {{ text-align:left; padding:10px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    .audit-table th {{ color:#2d2424; background:#fff3d8; font-weight:900; }}
+    .audit-table td {{ color:#6f625f; background:rgba(255,255,255,.62); }}
     .thumb-title {{ font-weight:900; color:#2d2424; margin-bottom:8px; }}
     .thumb-triple {{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }}
     .thumb-triple > div {{ min-width:0; }}
@@ -4026,6 +4167,11 @@ def result_detail_page(name: str, message: str = "") -> str:
     <p>{final_summary}</p>
     <p>원본 {html.escape(str(final_choice_counts.get("original", 0)))} / 문구 수정본 {html.escape(str(final_choice_counts.get("revised", 0)))} / 재생성본 {html.escape(str(final_choice_counts.get("regen", 0)))}</p>
     {final_html}
+  </section>
+  <section class="panel">
+    <h2>최종 후보 ZIP 상세 검수</h2>
+    <p>최종 후보 폴더와 ZIP을 다시 읽어 파일명, 선택 출처, 형식, 크기, 용량, 프레임 수를 확인합니다.</p>
+    {final_audit_html}
   </section>
   <section class="panel">
     <h2>비슷한 스타일 / 다음 생성 방향</h2>
@@ -5599,6 +5745,7 @@ def build_creator_evidence_package(
         output_dir / "action_regeneration" / "action_regeneration_report.json",
         output_dir / "final_candidates" / "final_candidates_report.json",
         output_dir / "final_candidates" / "final_candidates_validation_report.json",
+        output_dir / "final_candidates" / "final_candidates_audit_report.json",
         output_dir / "next_generation_direction.json",
         output_dir / "preview_gallery.html",
         output_dir / "revised_phrase_variant" / "revised_phrase_apply_report.json",
