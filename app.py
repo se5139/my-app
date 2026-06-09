@@ -3627,9 +3627,7 @@ def make_static_image(
     expression_variant = draw_expression_overlay(draw, emotion, index)
     draw_emotion_effect(draw, emotion, index)
     title_font = find_font(34, bold=True)
-    emotion_font = find_font(14, bold=True)
     draw_centered_text(draw, phrase, title_font, 180, 292, "#2d2424", "#ffffff", 3)
-    draw_centered_text(draw, str(emotion["label"]), emotion_font, 180, 260, "#7b6258", "#fff8ea", 2)
     return image, expression_variant
 
 
@@ -3656,9 +3654,7 @@ def make_animated_frames(
         expression_variant = draw_expression_overlay(draw, emotion, index, int(bounce), frame_index)
         draw_emotion_effect(draw, emotion, index, frame_index)
         title_font = find_font(32, bold=True)
-        emotion_font = find_font(14, bold=True)
         draw_centered_text(draw, phrase, title_font, 180, 294, "#2d2424", "#ffffff", 3)
-        draw_centered_text(draw, str(emotion["label"]), emotion_font, 180, 260, "#7b6258", "#fff8ea", 2)
         frames.append(image)
     return frames, expression_variant
 
