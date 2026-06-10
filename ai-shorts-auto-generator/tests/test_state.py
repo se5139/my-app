@@ -4,7 +4,7 @@ from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
 from ai_shorts.first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
-from ai_shorts.handoff_report import create_handoff_report
+from ai_shorts.handoff_report import create_handoff_report, list_handoff_reports, read_handoff_report
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
@@ -89,6 +89,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "설정 가이드 생성" in html
     assert "생성된 가이드 보기" in html
     assert "handoff 보고서" in html
+    assert "생성된 보고서 보기" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -364,6 +365,20 @@ def test_handoff_report_creates_markdown_and_manifest(tmp_path, monkeypatch) -> 
     assert report["setup_guide_count"] == 4
     assert pathlib_path_exists(report["report_path"])
     assert pathlib_path_exists(report["manifest_path"])
+
+
+def test_handoff_report_lists_and_reads_reports(tmp_path, monkeypatch) -> None:
+    from ai_shorts import handoff_report, operations_snapshot
+
+    monkeypatch.setattr(operations_snapshot, "SNAPSHOT_DIR", tmp_path / "snapshots")
+    monkeypatch.setattr(handoff_report, "SNAPSHOT_DIR", tmp_path / "snapshots")
+    monkeypatch.setattr(handoff_report, "HANDOFF_REPORTS_DIR", tmp_path / "handoff_reports")
+    create_handoff_report()
+    reports = list_handoff_reports()
+    assert reports
+    detail = read_handoff_report(reports[0]["filename"])
+    assert detail["filename"] == reports[0]["filename"]
+    assert "Resume Rule" in detail["content"]
 
 
 def pathlib_path_exists(path: str) -> bool:

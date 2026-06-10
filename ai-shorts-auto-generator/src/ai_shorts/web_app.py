@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
-from .handoff_report import create_handoff_report
+from .handoff_report import create_handoff_report, list_handoff_reports, read_handoff_report
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -192,6 +192,51 @@ def _render_setup_guide_detail(filename: str) -> str:
       <h2>{_escape(guide.get('title'))}</h2>
       <p class="muted"><code>{_escape(guide.get('path'))}</code></p>
       <pre class="narration">{_escape(guide.get('content'))}</pre>
+    </section>
+    """
+
+
+def _render_handoff_reports_index() -> str:
+    reports = list_handoff_reports()
+    if not reports:
+        return """
+        <section class="band">
+          <h2>handoff 보고서</h2>
+          <p class="empty">아직 생성된 handoff 보고서가 없습니다.</p>
+          <form method="post" action="/handoff-report">
+            <div class="actions">
+              <button type="submit">handoff 보고서 생성</button>
+              <a href="/">홈으로</a>
+            </div>
+          </form>
+        </section>
+        """
+    rows = "".join(
+        "<tr>"
+        f"<td><a href=\"/handoff-report?file={_escape(item.get('filename'))}\">{_escape(item.get('title'))}</a></td>"
+        f"<td><code>{_escape(item.get('filename'))}</code></td>"
+        f"<td><code>{_escape(item.get('path'))}</code></td>"
+        "</tr>"
+        for item in reports
+    )
+    return f"""
+    <section class="band">
+      <h2>handoff 보고서</h2>
+      <p class="muted">생성된 handoff Markdown 보고서를 앱 안에서 열람합니다.</p>
+      <table><thead><tr><th>보고서</th><th>파일명</th><th>경로</th></tr></thead><tbody>{rows}</tbody></table>
+      <div class="actions"><a href="/">홈으로</a></div>
+    </section>
+    """
+
+
+def _render_handoff_report_detail(filename: str) -> str:
+    report = read_handoff_report(filename)
+    return f"""
+    <section class="band">
+      <a class="back" href="/handoff-reports">← handoff 보고서 목록</a>
+      <h2>{_escape(report.get('title'))}</h2>
+      <p class="muted"><code>{_escape(report.get('path'))}</code></p>
+      <pre class="narration">{_escape(report.get('content'))}</pre>
     </section>
     """
 
@@ -915,6 +960,7 @@ def _render_page(
       <form method="post" action="/handoff-report">
         <div class="actions">
           <button class="secondary" type="submit">handoff 보고서 생성</button>
+          <a href="/handoff-reports">생성된 보고서 보기</a>
           <span class="muted">보고서는 data/handoff_reports 아래에 저장됩니다.</span>
         </div>
       </form>
@@ -939,6 +985,14 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/setup-guide":
             query = parse_qs(parsed.query)
             detail_html = _render_setup_guide_detail(query.get("file", [""])[0])
+            self._send(_render_page(detail_html=detail_html))
+            return
+        if parsed.path == "/handoff-reports":
+            self._send(_render_page(detail_html=_render_handoff_reports_index()))
+            return
+        if parsed.path == "/handoff-report":
+            query = parse_qs(parsed.query)
+            detail_html = _render_handoff_report_detail(query.get("file", [""])[0])
             self._send(_render_page(detail_html=detail_html))
             return
         self._send(_render_page())

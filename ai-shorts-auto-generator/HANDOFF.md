@@ -489,6 +489,23 @@ Next recommended work:
 
 - Add an in-app handoff report viewer and latest-report link.
 
+## 2026-06-10 Handoff Report Viewer Step
+
+Added in-app handoff report viewing:
+
+- `src/ai_shorts/handoff_report.py` can list and safely read generated handoff Markdown reports by filename.
+- The handoff report panel links to `생성된 보고서 보기`.
+- The web app now has `/handoff-reports` and `/handoff-report?file=...` screens for index/detail viewing.
+
+Verification target:
+
+- Compile handoff report, web app, and tests.
+- Smoke-test report creation, index rendering, and detail rendering.
+
+Next recommended work:
+
+- Add a production-readiness dashboard that summarizes content pipeline readiness beyond setup: drafts, reviews, renders, upload gates, and growth data.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

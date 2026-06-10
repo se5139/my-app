@@ -38,6 +38,34 @@ def create_handoff_report() -> dict[str, Any]:
     return manifest
 
 
+def list_handoff_reports() -> list[dict[str, str]]:
+    if not HANDOFF_REPORTS_DIR.exists():
+        return []
+    reports = []
+    for path in sorted(HANDOFF_REPORTS_DIR.glob("handoff_report_*.md"), key=lambda item: item.stat().st_mtime, reverse=True):
+        reports.append(
+            {
+                "filename": path.name,
+                "title": _read_markdown_title(path),
+                "path": str(path),
+            }
+        )
+    return reports
+
+
+def read_handoff_report(filename: str) -> dict[str, str]:
+    safe_name = Path(filename).name
+    path = HANDOFF_REPORTS_DIR / safe_name
+    if not safe_name or path.suffix.lower() != ".md" or not path.exists():
+        raise FileNotFoundError("handoff report not found")
+    return {
+        "filename": safe_name,
+        "title": _read_markdown_title(path),
+        "path": str(path),
+        "content": path.read_text(encoding="utf-8"),
+    }
+
+
 def _latest_file(folder: Path, pattern: str) -> Path | None:
     if not folder.exists():
         return None
@@ -45,6 +73,13 @@ def _latest_file(folder: Path, pattern: str) -> Path | None:
     if not matches:
         return None
     return max(matches, key=lambda path: path.stat().st_mtime)
+
+
+def _read_markdown_title(path: Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return path.stem
 
 
 def _handoff_markdown(
