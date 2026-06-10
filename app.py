@@ -2543,6 +2543,36 @@ def system_status_page() -> str:
         dependency_status["Pillow"] = "unknown"
     memory = load_evolution_memory()
     key_status = api_key_status()
+    team_rows = "".join(
+        f"<tr><td>{html.escape(name)}</td><td>{html.escape(scope)}</td><td>{html.escape(next_step)}</td></tr>"
+        for name, scope, next_step in [
+            (
+                "1. 기획/요구사항",
+                "전체 기능, 중복/누락, 기존 기능 보존, 다음 개발 우선순위",
+                "요청을 기능 단위로 나누고 삭제 위험을 먼저 확인",
+            ),
+            (
+                "2. 이미지/품질/저작권",
+                "PNG/GIF/WebP 규격, 움직임, 문구/캐릭터 품질, 저작권 위험",
+                "생성 결과와 제출 전 검수 기준을 계속 강화",
+            ),
+            (
+                "3. 데이터/엑셀/DB/백업",
+                "카카오 엑셀 분석, JSON/CSV/SQLite, 누적 학습, 백업/복구",
+                "사용자 데이터와 코드 분리, 다른 PC 이동성 확인",
+            ),
+            (
+                "4. 보안/비용/API",
+                ".env, 키 마스킹, ZIP 비밀파일 제외, API 비용 차단",
+                "유료 호출 기본 차단과 키 노출 방지 유지",
+            ),
+            (
+                "5. UI/문서/QA/릴리즈",
+                "웹 UX, 한글 설명, 테스트, BAT/ZIP 릴리즈",
+                "화면 동선 수정 후 검증, 커밋, 푸시",
+            ),
+        ]
+    )
     key_rows = "".join(
         f"<li>{html.escape(provider)}: <code>{html.escape(info['env_var'])}</code> "
         f"사용 가능 {html.escape(info['available'])} / 정책 {html.escape(info['window'])} / 한도 {html.escape(info['limit'])} / "
@@ -2575,6 +2605,9 @@ def system_status_page() -> str:
     h1 {{ margin: 0 0 10px; font-size: clamp(32px, 5vw, 54px); letter-spacing: -0.05em; }}
     p, li {{ line-height: 1.7; color: #6f625f; }}
     code {{ background: #fff3d8; padding: 2px 6px; border-radius: 8px; }}
+    table {{ width:100%; border-collapse:collapse; }}
+    th, td {{ padding:10px 12px; border-bottom:1px solid #ead8bc; text-align:left; vertical-align:top; line-height:1.6; }}
+    th {{ background:#fff3d8; color:#2d2424; }}
     a.button {{
       display: inline-block;
       border-radius: 999px;
@@ -2603,6 +2636,15 @@ def system_status_page() -> str:
         <li>필수 API 키: 없음</li>
         <li>API 사용 안전장치: Google 계열은 일일 한도, OpenAI는 31일 한도</li>
       </ul>
+    </section>
+    <section class="panel">
+      <h2>5담당자 운영 현황</h2>
+      <p>세영님은 최종 담당자에게만 지시하고, 최종 담당자는 아래 5담당 기준으로 점검, 수정, 검증, 저장소 반영을 취합합니다.</p>
+      <table>
+        <thead><tr><th>담당자</th><th>책임 범위</th><th>다음 진행 기준</th></tr></thead>
+        <tbody>{team_rows}</tbody>
+      </table>
+      <p>수정 작업은 기존 기능 삭제 없이 진행하고, API 키와 비용 발생 가능 호출은 기본 차단합니다.</p>
     </section>
     <section class="panel">
       <h2>API 키 상태</h2>
@@ -9622,10 +9664,14 @@ def image_from_upload(files: dict[str, tuple[str, bytes]], key: str) -> tuple[Im
         return None, filename
 
 
+class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main() -> None:
     OUTPUT_ROOT.mkdir(exist_ok=True)
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((HOST, PORT), Handler) as httpd:
+    with ThreadingTCPServer((HOST, PORT), Handler) as httpd:
         url = f"http://{HOST}:{PORT}"
         print(f"{APP_NAME} running at {url}")
         if os.environ.get("KAKAO_NO_BROWSER", "").strip() != "1":
