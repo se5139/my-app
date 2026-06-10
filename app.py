@@ -230,6 +230,16 @@ AUTO_RESEARCH_SEEDS = [
     "https://www.mcst.go.kr/",
 ]
 
+KAKAO_POLICY_LINKS = [
+    ("이모티콘 스튜디오 가이드", "https://emoticonstudio.kakao.com/guideline"),
+    ("이모티콘 스튜디오 FAQ", "https://emoticonstudio.kakao.com/pages/faq?from=with_faq"),
+    ("이모티콘 스튜디오 약관", "https://emoticonstudio.kakao.com/terms"),
+    ("WebP 애니메이터", "https://emoticonstudio.kakao.com/webp-animator"),
+    ("Kakao Developers REST API", "https://developers.kakao.com/docs/latest/ko/kakaologin/rest-api"),
+    ("Kakao Developers 쿼터", "https://developers.kakao.com/docs/latest/ko/getting-started/quota"),
+    ("Kakao Developers 유료 API", "https://developers.kakao.com/docs/latest/ko/getting-started/billing"),
+]
+
 PLATFORM_OFFICIAL_HOSTS = [
     "emoticonstudio.kakao.com",
     "kakao.com",
@@ -262,6 +272,7 @@ API_KEY_ENV_VARS = {
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
     "naver_search": "NAVER_CLIENT_ID",
+    "kakao_rest": "KAKAO_REST_API_KEY",
 }
 
 OPTIONAL_LOCAL_SECRET_ENV_VARS = {
@@ -282,8 +293,10 @@ LOCAL_ENV_MANAGED_KEYS = [
     "GEMINI_API_ENABLED",
     "YOUTUBE_API_ENABLED",
     "NAVER_SEARCH_API_ENABLED",
+    "KAKAO_API_ENABLED",
     "SEARCH_API_ENABLED",
     "OPENAI_API_ENABLED",
+    "KAKAO_API_DAILY_CALL_LIMIT",
 ]
 
 API_31D_LIMIT_ENV_VARS = {
@@ -298,6 +311,7 @@ API_DAILY_LIMIT_ENV_VARS = {
     "search": "SEARCH_API_DAILY_CALL_LIMIT",
     "gemini": "GEMINI_API_DAILY_CALL_LIMIT",
     "naver_search": "NAVER_SEARCH_DAILY_CALL_LIMIT",
+    "kakao_rest": "KAKAO_API_DAILY_CALL_LIMIT",
 }
 
 API_LEGACY_30D_LIMIT_ENV_VARS = {
@@ -306,6 +320,7 @@ API_LEGACY_30D_LIMIT_ENV_VARS = {
     "gemini": "GEMINI_API_30D_CALL_LIMIT",
     "openai": "OPENAI_API_30D_CALL_LIMIT",
     "naver_search": "NAVER_SEARCH_30D_CALL_LIMIT",
+    "kakao_rest": "KAKAO_API_30D_CALL_LIMIT",
 }
 
 API_ENABLE_ENV_VARS = {
@@ -314,13 +329,14 @@ API_ENABLE_ENV_VARS = {
     "gemini": "GEMINI_API_ENABLED",
     "openai": "OPENAI_API_ENABLED",
     "naver_search": "NAVER_SEARCH_API_ENABLED",
+    "kakao_rest": "KAKAO_API_ENABLED",
 }
 
 KST = timezone(timedelta(hours=9))
 PACIFIC_STANDARD = timezone(timedelta(hours=-8))
 PACIFIC_DAYLIGHT = timezone(timedelta(hours=-7))
 API_SAFETY_WINDOW_DAYS = 31
-DAILY_RESET_PROVIDERS = {"youtube", "search", "gemini", "naver_search"}
+DAILY_RESET_PROVIDERS = {"youtube", "search", "gemini", "naver_search", "kakao_rest"}
 PACIFIC_RESET_PROVIDERS = {"gemini"}
 
 
@@ -2590,7 +2606,7 @@ def api_settings_page(message: str = "") -> str:
   <main>
     <section class="panel">
       <h1>API 키 안내</h1>
-      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/status">실행 상태</a><a class="button" href="/release-check">배포 점검</a></p>
+      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/status">실행 상태</a><a class="button" href="/release-check">배포 점검</a><a class="button" href="/kakao-policy-check">Kakao 링크 점검</a></p>
       <form method="post" action="/api-usage/reset">
         <button type="submit">API 사용량 원장 초기화</button>
       </form>
@@ -2661,6 +2677,17 @@ def api_settings_page(message: str = "") -> str:
               <option value="1" {'selected' if os.environ.get('NAVER_SEARCH_API_ENABLED', '0') == '1' else ''}>허용</option>
             </select>
           </div>
+          <div>
+            <label for="kakao_limit">Kakao REST 하루 호출 한도</label>
+            <input id="kakao_limit" name="KAKAO_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('KAKAO_API_DAILY_CALL_LIMIT', '0'))}">
+          </div>
+          <div>
+            <label for="kakao_enabled">Kakao REST API 비용 발생 가능 호출</label>
+            <select id="kakao_enabled" name="KAKAO_API_ENABLED">
+              <option value="0" {'selected' if os.environ.get('KAKAO_API_ENABLED', '0') != '1' else ''}>차단</option>
+              <option value="1" {'selected' if os.environ.get('KAKAO_API_ENABLED', '0') == '1' else ''}>허용</option>
+            </select>
+          </div>
         </div>
         <button type="submit">이 PC에 키 저장</button>
       </form>
@@ -2685,9 +2712,10 @@ def api_settings_page(message: str = "") -> str:
       </ul>
       <p>비용 방지를 위해 키가 있어도 허용 스위치가 차단이거나 한도 환경변수가 0이면 API 호출을 막습니다.</p>
       <ul>
-        <li><code>YOUTUBE_API_ENABLED</code>, <code>GEMINI_API_ENABLED</code>, <code>NAVER_SEARCH_API_ENABLED</code>: <code>1</code>일 때만 호출 허용</li>
+        <li><code>YOUTUBE_API_ENABLED</code>, <code>GEMINI_API_ENABLED</code>, <code>NAVER_SEARCH_API_ENABLED</code>, <code>KAKAO_API_ENABLED</code>: <code>1</code>일 때만 호출 허용</li>
         <li><code>YOUTUBE_API_DAILY_CALL_LIMIT</code>: 하루 유튜브 API 호출 허용 횟수</li>
         <li><code>NAVER_SEARCH_DAILY_CALL_LIMIT</code>: 하루 Naver 검색 API 호출 허용 횟수</li>
+        <li><code>KAKAO_API_DAILY_CALL_LIMIT</code>: 하루 Kakao REST API 호출 허용 횟수</li>
         <li><code>SEARCH_API_DAILY_CALL_LIMIT</code>: 하루 검색 API 호출 허용 횟수</li>
         <li><code>GOOGLE_CSE_ID</code>: Google Custom Search 검색 엔진 ID, 현재 {'설정됨' if cse_id else '미설정'}</li>
         <li><code>GEMINI_API_DAILY_CALL_LIMIT</code>: 하루 Gemini API 호출 허용 횟수, Pacific 자정 리셋</li>
@@ -2696,6 +2724,145 @@ def api_settings_page(message: str = "") -> str:
       <p>현재 필수 키는 없습니다. 키가 없으면 URL 제목 수집과 조사 메모 분석으로 동작합니다.</p>
     </section>
   </main>
+</body>
+</html>"""
+
+
+def check_public_link(label: str, url: str) -> dict[str, object]:
+    started = time.time()
+    status_code = 0
+    status = "failed"
+    final_url = url
+    title = ""
+    error = ""
+    try:
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0 KakaoEmoticonV100LinkCheck/1.0"})
+        with urlopen(request, timeout=8) as response:
+            status_code = int(getattr(response, "status", 0) or 0)
+            final_url = str(response.geturl())
+            content_type = response.headers.get("Content-Type", "")
+            data = response.read(200_000)
+        status = "ok" if 200 <= status_code < 400 else "warn"
+        if "html" in content_type.lower():
+            text = data.decode("utf-8", errors="replace")
+            title_match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
+            if title_match:
+                title = html.unescape(re.sub(r"\s+", " ", title_match.group(1))).strip()
+    except Exception as exc:
+        error = type(exc).__name__
+    return {
+        "label": label,
+        "url": url,
+        "final_url": final_url,
+        "status": status,
+        "status_code": status_code,
+        "title": title,
+        "error": error,
+        "elapsed_ms": round((time.time() - started) * 1000),
+    }
+
+
+def build_kakao_policy_link_report() -> dict[str, object]:
+    output_dir = OUTPUT_ROOT / "_kakao_policy_checks"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    checks = [check_public_link(label, url) for label, url in KAKAO_POLICY_LINKS]
+    fail_count = sum(1 for item in checks if item.get("status") == "failed")
+    warn_count = sum(1 for item in checks if item.get("status") == "warn")
+    report = {
+        "created_at": timestamp,
+        "status": "pass" if fail_count == 0 and warn_count == 0 else "review",
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "kakao_rest_api_usage": "not_used",
+        "cost_guard": "This check uses public GET requests only and does not call Kakao REST API or consume paid API quota.",
+        "safe_scope": "공식 링크 접근성 확인용입니다. 제출 자동화나 심사 자동화가 아닙니다.",
+    }
+    json_path = output_dir / f"{timestamp}_kakao_policy_link_report.json"
+    write_json_file(json_path, report)
+    report["json"] = str(json_path)
+    return report
+
+
+def latest_kakao_policy_link_report() -> dict[str, object]:
+    report_dir = OUTPUT_ROOT / "_kakao_policy_checks"
+    if not report_dir.exists():
+        return {}
+    reports = sorted(report_dir.glob("*_kakao_policy_link_report.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not reports:
+        return {}
+    payload = read_json_file(reports[0], {})
+    if isinstance(payload, dict):
+        payload["json"] = str(reports[0])
+        return payload
+    return {}
+
+
+def kakao_policy_check_page(message: str = "") -> str:
+    report = latest_kakao_policy_link_report()
+    checks = report.get("checks", []) if isinstance(report, dict) else []
+    rows = ""
+    for item in checks if isinstance(checks, list) else []:
+        if not isinstance(item, dict):
+            continue
+        rows += f"""
+        <tr>
+          <td><span class="badge {html.escape(str(item.get("status", "")))}">{html.escape(str(item.get("status", "")))}</span></td>
+          <td>{html.escape(str(item.get("label", "")))}</td>
+          <td><a href="{html.escape(str(item.get("url", "")))}">{html.escape(str(item.get("url", "")))}</a></td>
+          <td>{html.escape(str(item.get("status_code", "")))}</td>
+          <td>{html.escape(str(item.get("title", "")))}</td>
+          <td>{html.escape(str(item.get("error", "")))}</td>
+        </tr>
+        """
+    if not rows:
+        rows = "<tr><td colspan='6'>아직 점검 리포트가 없습니다.</td></tr>"
+    message_html = f'<section class="notice">{html.escape(message)}</section>' if message else ""
+    report_json = str(report.get("json", "")) if isinstance(report, dict) else ""
+    report_link = f"<a class='button' href='/{html.escape(report_json.replace(chr(92), '/'))}'>최근 JSON 열기</a>" if report_json else ""
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kakao Policy Link Check</title>
+  <style>
+    body {{ margin:0; color:#2d2424; font-family:"Malgun Gothic", sans-serif; background:linear-gradient(135deg,#fffaf0,#eef8ef); }}
+    main {{ width:min(1080px, calc(100% - 32px)); margin:0 auto; padding:42px 0; }}
+    .panel, .notice {{ border:2px solid #ead8bc; border-radius:28px; background:rgba(255,255,255,.9); padding:24px; box-shadow:0 18px 50px rgba(96,69,45,.11); margin-bottom:18px; }}
+    .notice {{ border-color:#9be2c7; background:#e9fff4; }}
+    h1 {{ margin:0 0 10px; font-size:clamp(32px,5vw,54px); }}
+    p, td, th {{ line-height:1.6; color:#6f625f; }}
+    table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
+    th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    th {{ color:#2d2424; background:#fff3d8; }}
+    a, button, .button {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:8px 11px; cursor:pointer; }}
+    .nav, button {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+    .badge {{ display:inline-block; border-radius:999px; padding:5px 9px; font-weight:900; border:1px solid #d8ccbc; background:#f7f4ef; color:#5d534e; }}
+    .badge.ok {{ background:#dff8eb; border-color:#83d7b6; color:#245d46; }}
+    .badge.warn, .badge.failed {{ background:#fff0ea; border-color:#f0b29b; color:#8a412d; }}
+  </style>
+</head>
+<body>
+<main>
+  {message_html}
+  <section class="panel">
+    <h1>Kakao 공식 링크 점검</h1>
+    <p>이 기능은 공개 웹 링크 접근성만 확인합니다. Kakao REST API 키를 사용하지 않으며 비용 발생 API 호출을 하지 않습니다.</p>
+    <p><a class="nav" href="/api-settings">API 키 안내</a><a class="nav" href="/results">최근 결과물</a>{report_link}</p>
+    <form method="post" action="/kakao-policy-check/run">
+      <button type="submit">공식 링크 다시 점검</button>
+    </form>
+  </section>
+  <section class="panel">
+    <p>최근 점검: {html.escape(str(report.get("created_at", "없음") if isinstance(report, dict) else "없음"))} / 상태 {html.escape(str(report.get("status", "대기") if isinstance(report, dict) else "대기"))}</p>
+    <table>
+      <thead><tr><th>상태</th><th>항목</th><th>URL</th><th>HTTP</th><th>제목</th><th>오류</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
+</main>
 </body>
 </html>"""
 
@@ -8437,6 +8604,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api-settings":
             self.respond(200, api_settings_page())
             return
+        if self.path == "/kakao-policy-check":
+            self.respond(200, kakao_policy_check_page())
+            return
         if self.path == "/release-check":
             self.respond(200, release_check_page())
             return
@@ -8473,6 +8643,15 @@ class Handler(BaseHTTPRequestHandler):
             }
             write_local_env_values(values)
             self.respond(200, api_settings_page(f"로컬 키 설정을 저장했습니다. 저장 위치: {LOCAL_ENV_PATH}"))
+            return
+        if self.path == "/kakao-policy-check/run":
+            report = build_kakao_policy_link_report()
+            self.respond(
+                200,
+                kakao_policy_check_page(
+                    f"Kakao 공식 링크 점검 완료: 상태 {report.get('status')} / 실패 {report.get('fail_count')}개 / 경고 {report.get('warn_count')}개"
+                ),
+            )
             return
         if self.path == "/memory/compact":
             compact_evolution_memory()
