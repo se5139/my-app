@@ -3,6 +3,7 @@ from __future__ import annotations
 import zipfile
 
 from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
+from ai_shorts.cost_guard import cost_guard_summary, evaluate_api_call, save_cost_guard
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
@@ -97,6 +98,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "제작 준비도" in html
     assert "API 키 준비" in html
     assert "API별 연결 준비" in html
+    assert "API 비용 차단" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -347,6 +349,25 @@ def test_api_connector_readiness_groups_required_keys(tmp_path, monkeypatch) -> 
     ready = api_connector_readiness()
     assert all(item["status"] == "ready" for item in ready)
     assert all(item["network_check"] == "not_run" for item in ready)
+
+
+def test_cost_guard_blocks_external_and_paid_calls(tmp_path, monkeypatch) -> None:
+    from ai_shorts import cost_guard
+
+    monkeypatch.setattr(cost_guard, "COST_GUARD_DIR", tmp_path / "settings")
+    monkeypatch.setattr(cost_guard, "COST_GUARD_PATH", tmp_path / "settings" / "cost_guard.json")
+    blocked = evaluate_api_call("gemini", 0, "smoke")
+    assert blocked["allowed"] is False
+    assert blocked["reason"] == "external_api_calls_blocked"
+
+    save_cost_guard({"external_api_calls_allowed": "yes"})
+    free_check = evaluate_api_call("gemini", 0, "smoke")
+    paid_check = evaluate_api_call("gemini", 1, "generation")
+    summary = cost_guard_summary()
+    assert free_check["allowed"] is True
+    assert paid_check["allowed"] is False
+    assert paid_check["reason"] == "paid_api_calls_blocked"
+    assert summary["mode"] == "zero_cost_only"
 
 
 def test_production_readiness_reports_api_and_growth_state(tmp_path, monkeypatch) -> None:

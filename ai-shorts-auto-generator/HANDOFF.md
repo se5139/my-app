@@ -541,6 +541,24 @@ Next recommended work:
 
 - Add connector smoke-check routes that can run user-approved lightweight calls for each API and store only status metadata.
 
+## 2026-06-10 API Cost Guard Step
+
+Added API cost protection before connector smoke checks:
+
+- `src/ai_shorts/cost_guard.py` blocks external API calls by default.
+- Even when zero-cost external checks are enabled, paid or cost-incurring API calls remain blocked with a 0 KRW daily limit.
+- The home page now shows `API 비용 차단`, and API readiness rows show the guard reason.
+- This prepares future Gemini, YouTube, Naver, and Kakao smoke checks without allowing accidental paid calls.
+
+Verification target:
+
+- Compile cost guard, API key, web app, and tests.
+- Smoke-test default external-call blocking and paid-call blocking after zero-cost checks are enabled.
+
+Next recommended work:
+
+- Add connector smoke-check routes that call `evaluate_api_call(...)` before any network request and save only status metadata.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

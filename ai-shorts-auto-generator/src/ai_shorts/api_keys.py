@@ -4,6 +4,7 @@ from typing import Any
 
 from .paths import DATA_DIR
 from .state import now_iso, read_json, write_json
+from .cost_guard import evaluate_api_call
 
 
 SECRETS_DIR = DATA_DIR / "secrets"
@@ -97,6 +98,7 @@ def api_connector_readiness(payload: dict[str, Any] | None = None) -> list[dict[
                 "required_keys": required,
                 "missing_keys": missing,
                 "network_check": "not_run",
+                "cost_guard": evaluate_api_call(connector["name"], 0, "connector_readiness"),
                 "next_step": "연결 테스트를 실행할 준비가 됐습니다." if not missing else "필수 키를 먼저 저장하세요.",
             }
         )

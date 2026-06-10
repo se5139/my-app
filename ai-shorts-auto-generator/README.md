@@ -129,6 +129,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - production readiness dashboard for drafts, upload gates, growth data, and API key status
 - local API key setup for Gemini, YouTube, Naver Client ID/Secret, and Kakao REST API key under ignored `data/secrets`
 - API-specific readiness panel for Gemini, YouTube, Naver, and Kakao key combinations
+- API cost guard that blocks external calls by default and always blocks paid/cost-incurring calls
 
 ## New PC Restore Guide
 

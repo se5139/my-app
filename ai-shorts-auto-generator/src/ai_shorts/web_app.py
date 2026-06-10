@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .api_keys import API_KEY_FIELDS, api_connector_readiness, api_key_status, save_api_keys
+from .cost_guard import cost_guard_summary, save_cost_guard
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
 from .handoff_report import create_handoff_report, list_handoff_reports, read_handoff_report
@@ -201,6 +202,25 @@ def _api_key_setup_html(api_result: dict | None = None) -> str:
     """
 
 
+def _cost_guard_html(cost_guard_result: dict | None = None) -> str:
+    guard = cost_guard_result or cost_guard_summary()
+    checked = " checked" if guard.get("external_api_calls_allowed") else ""
+    return f"""
+    <section class="band">
+      <h2>API 비용 차단</h2>
+      <p>모드 <span class="status">{_escape(guard.get('mode'))}</span> · 유료 호출 <span class="status">{_escape('blocked')}</span> · 일일 한도 <code>{int(guard.get('max_daily_cost_krw', 0))} KRW</code></p>
+      <p class="muted">{_escape(guard.get('next_step'))}</p>
+      <form method="post" action="/cost-guard">
+        <label><input type="checkbox" name="external_api_calls_allowed" value="yes"{checked}> 외부 연결 테스트 허용</label>
+        <div class="actions">
+          <button class="secondary" type="submit">비용 차단 설정 저장</button>
+          <span class="muted">유료/비용 발생 가능 호출은 계속 차단됩니다.</span>
+        </div>
+      </form>
+    </section>
+    """
+
+
 def _api_connector_readiness_html() -> str:
     rows = "".join(
         "<tr>"
@@ -208,6 +228,7 @@ def _api_connector_readiness_html() -> str:
         f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
         f"<td>{_escape(item.get('purpose'))}</td>"
         f"<td><code>{_escape(', '.join(item.get('missing_keys', [])) or 'none')}</code></td>"
+        f"<td><code>{_escape(item.get('cost_guard', {}).get('reason'))}</code></td>"
         f"<td>{_escape(item.get('next_step'))}</td>"
         "</tr>"
         for item in api_connector_readiness()
@@ -216,7 +237,7 @@ def _api_connector_readiness_html() -> str:
     <section class="band">
       <h2>API별 연결 준비</h2>
       <p class="muted">현재 단계에서는 외부 네트워크 호출 없이 저장된 키 조합만 확인합니다. 실제 연결 테스트는 다음 단계에서 별도로 실행합니다.</p>
-      <table><thead><tr><th>API</th><th>상태</th><th>용도</th><th>부족한 키</th><th>다음 작업</th></tr></thead><tbody>{rows}</tbody></table>
+      <table><thead><tr><th>API</th><th>상태</th><th>용도</th><th>부족한 키</th><th>비용 차단</th><th>다음 작업</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
     """
 
@@ -698,6 +719,7 @@ def _render_page(
     setup_guides: dict | None = None,
     handoff_report: dict | None = None,
     api_result: dict | None = None,
+    cost_guard_result: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -874,6 +896,7 @@ def _render_page(
       font: inherit;
       background: #fff;
     }}
+    input[type="checkbox"] {{ width: auto; margin-right: 8px; }}
     textarea {{ min-height: 118px; resize: vertical; }}
     button {{
       border: 0;
@@ -938,6 +961,7 @@ def _render_page(
     {_environment_check_html()}
     {_production_readiness_html()}
     {_api_key_setup_html(api_result)}
+    {_cost_guard_html(cost_guard_result)}
     {_api_connector_readiness_html()}
     {_first_run_checklist_html()}
     <section class="band">
@@ -1146,6 +1170,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api-keys":
                 api_result = save_api_keys({field["name"]: params.get(field["name"], [""])[0] for field in API_KEY_FIELDS})
                 self._send(_render_page(api_result=api_result))
+                return
+            if self.path == "/cost-guard":
+                cost_guard_result = save_cost_guard({"external_api_calls_allowed": params.get("external_api_calls_allowed", [""])[0]})
+                self._send(_render_page(cost_guard_result=cost_guard_result))
                 return
             if self.path == "/operations-snapshot":
                 snapshot = create_operations_snapshot()
