@@ -4053,6 +4053,8 @@ def release_exclusion_reason(path: Path) -> str | None:
         "__pycache__",
         "outputs",
         "output",
+        "data",
+        "secrets",
         "release",
         "github_backup",
         "_github_upload",
@@ -4060,6 +4062,8 @@ def release_exclusion_reason(path: Path) -> str | None:
         "_review_v92",
         "_final_zip_recheck",
         "_deliverables_v90",
+        "_deliverables_v92",
+        "_legacy_tools",
     }
     excluded_prefixes = ("_test_localappdata",)
     excluded_suffixes = (
@@ -4123,6 +4127,7 @@ def release_allowlist_files() -> list[Path]:
         Path("scripts/stop_port.py"),
         Path("scripts/wait_for_port.py"),
         Path("scripts/verify_package.py"),
+        Path("scripts/build_v100_release_package.py"),
         Path("scripts/export_sync_state.py"),
         Path("scripts/import_sync_state.py"),
     ]
