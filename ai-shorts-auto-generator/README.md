@@ -115,6 +115,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - project dashboard summary that shows the current blocking gate and next action for each draft
 - weekly plan queue that promotes selected 2 to 3 planned topics into autosaved draft projects
 - growth learning performance record form for views, retention, CTR, watch time, notes, and computed growth score
+- growth learning score boosts for weekly plans when candidate topics match prior performance records
 
 ## Local Git Setup For This PC
 

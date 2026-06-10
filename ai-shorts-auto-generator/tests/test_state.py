@@ -10,7 +10,7 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
-from ai_shorts.growth_learning import add_performance_record, recent_performance_records
+from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, recent_performance_records
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
@@ -195,3 +195,19 @@ def test_growth_learning_records_performance(tmp_path, monkeypatch) -> None:
     records = recent_performance_records()
     assert records[0]["title"] == "성과 테스트"
     assert (tmp_path / "performance_records.json").exists()
+
+
+def test_growth_learning_boosts_matching_weekly_topics(tmp_path, monkeypatch) -> None:
+    from ai_shorts import growth_learning
+
+    monkeypatch.setattr(growth_learning, "PERFORMANCE_RECORDS_PATH", tmp_path / "performance_records.json")
+    add_performance_record("출근 루틴 성공 영상", views=2500, retention_pct=72, ctr_pct=8.1, avg_view_duration_sec=22)
+    insights = apply_growth_learning_to_topics(
+        [
+            TopicInsight(topic="출근 루틴 정리", growth_score=50),
+            TopicInsight(topic="저녁 식단 기록", growth_score=50),
+        ]
+    )
+    plan = create_weekly_plan(insights, target_count=2)
+    assert plan.slots[0].topic == "출근 루틴 정리"
+    assert "growth learning boost" in plan.slots[0].reason

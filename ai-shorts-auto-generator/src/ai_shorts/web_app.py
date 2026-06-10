@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .growth_learning import add_performance_record, recent_performance_records
+from .growth_learning import add_performance_record, apply_growth_learning_to_topics, recent_performance_records
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
@@ -729,7 +729,8 @@ class Handler(BaseHTTPRequestHandler):
                 topics_text = params.get("topics", [""])[0]
                 count = int(params.get("count", ["2"])[0] or 2)
                 topics = [line.strip() for line in topics_text.splitlines() if line.strip()]
-                plan = create_weekly_plan([TopicInsight(topic=topic) for topic in topics], count)
+                insights = apply_growth_learning_to_topics([TopicInsight(topic=topic) for topic in topics])
+                plan = create_weekly_plan(insights, count)
                 save_weekly_plan_queue(plan.to_dict())
                 self._send(_render_page(plan=plan.to_dict()))
                 return

@@ -319,6 +319,23 @@ Next recommended work:
 
 - Connect growth records to weekly planning so matching topics receive score boosts automatically.
 
+## 2026-06-10 Growth Learning Weekly Score Step
+
+Connected growth records to weekly planning:
+
+- `apply_growth_learning_to_topics(...)` boosts candidate topic scores when words match prior performance record titles or notes.
+- The web weekly plan route now applies growth learning before ranking slots.
+- Boosted slots include `growth learning boost=...` in their reason text.
+
+Verification target:
+
+- Compile growth learning, web, and tests.
+- Add a performance record, create a weekly plan with a matching candidate, and verify the matching topic ranks first.
+
+Next recommended work:
+
+- Add a CSV import path for YouTube Studio exports so performance rows can be added in bulk.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
