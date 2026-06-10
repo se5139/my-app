@@ -21,6 +21,7 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
     audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
     audio_mix_status = read_json(audio_dir / "audio_mix_status.json", {})
     subtitle_burn_status = read_json(final_dir / "subtitle_burn_status.json", {})
+    thumbnail_manifest = read_json(package_dir / "thumbnail" / "thumbnail_manifest.json", {})
 
     copied: dict[str, str] = {}
     missing: list[str] = []
@@ -53,6 +54,12 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
         else:
             missing.append(f"{key}_subtitle")
 
+    thumbnail_path = package_dir / "thumbnail.png"
+    if thumbnail_manifest.get("status") == "thumbnail_ready" and thumbnail_path.exists():
+        copied["thumbnail_png"] = _copy(thumbnail_path, media_dir / "thumbnail.png")
+    else:
+        missing.append("thumbnail_ready")
+
     if audio_manifest.get("status") == "audio_ready":
         audio_package_dir = media_dir / "audio"
         copied["audio_manifest"] = _copy(audio_dir / "audio_manifest.json", audio_package_dir / "audio_manifest.json")
@@ -77,6 +84,7 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
             "audio_manifest": str(audio_dir / "audio_manifest.json") if audio_manifest else "",
             "audio_mix_status": str(audio_dir / "audio_mix_status.json") if audio_mix_status else "",
             "subtitle_burn_status": str(final_dir / "subtitle_burn_status.json") if subtitle_burn_status else "",
+            "thumbnail_manifest": str(package_dir / "thumbnail" / "thumbnail_manifest.json") if thumbnail_manifest else "",
         },
         "subtitle_mode": subtitle_mode,
         "next_step": _next_step(status),
@@ -106,4 +114,4 @@ def _copy_audio_track(track: Any, audio_package_dir: Path, copied: dict[str, str
 def _next_step(status: str) -> str:
     if status == "final_media_ready":
         return "수동 업로드 전 final_preview.mp4, 선택 번인본, SRT/VTT sidecar 자막을 사람이 최종 확인하세요."
-    return "최종 미디어 패키지를 만들기 전에 MP4 렌더, SRT/VTT 자막, 로컬 오디오 게이트, 오디오 믹싱을 완료하세요."
+    return "최종 미디어 패키지를 만들기 전에 MP4 렌더, SRT/VTT 자막, 로컬 오디오 게이트, 오디오 믹싱, 썸네일 승인을 완료하세요."

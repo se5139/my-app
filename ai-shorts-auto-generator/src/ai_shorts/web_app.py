@@ -31,6 +31,7 @@ from .workflow import (
     generate_subtitle_export,
     mix_audio_for_video,
     package_final_media,
+    prepare_thumbnail,
     prepare_audio_assets,
     update_final_upload_checklist,
     update_render_export_review,
@@ -418,6 +419,7 @@ def _render_project_detail(project_id: str) -> str:
     render_export_status = read_json(package_dir / "render_export_status.json", {})
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
+    thumbnail_manifest = read_json(package_dir / "thumbnail" / "thumbnail_manifest.json", {})
     subtitle_burn_status = read_json(PROJECTS_DIR / project_id / "renders" / "final" / "subtitle_burn_status.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
@@ -521,6 +523,13 @@ def _render_project_detail(project_id: str) -> str:
     subtitle_burn_state = subtitle_burn_status.get("status", "not_created") if isinstance(subtitle_burn_status, dict) else "not_created"
     burned_video_path = subtitle_burn_status.get("burned_video_path", "") if isinstance(subtitle_burn_status, dict) else ""
     subtitle_burn_next_step = subtitle_burn_status.get("next_step", "원하면 final_preview.mp4에 SRT 자막을 직접 입히세요.") if isinstance(subtitle_burn_status, dict) else "원하면 final_preview.mp4에 SRT 자막을 직접 입히세요."
+    thumbnail_status = thumbnail_manifest.get("status", "not_created") if isinstance(thumbnail_manifest, dict) else "not_created"
+    thumbnail_png = thumbnail_manifest.get("thumbnail_png", "") if isinstance(thumbnail_manifest, dict) else ""
+    thumbnail_svg = thumbnail_manifest.get("thumbnail_svg", "") if isinstance(thumbnail_manifest, dict) else ""
+    thumbnail_validation = thumbnail_manifest.get("validation", {}) if isinstance(thumbnail_manifest, dict) else {}
+    thumbnail_issues = thumbnail_validation.get("issues", []) if isinstance(thumbnail_validation, dict) else []
+    thumbnail_issue_text = ", ".join(str(item) for item in thumbnail_issues) if thumbnail_issues else "없음"
+    thumbnail_next_step = thumbnail_manifest.get("next_step", "썸네일 문구를 확인하고 승인하세요.") if isinstance(thumbnail_manifest, dict) else "썸네일 문구를 확인하고 승인하세요."
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -571,6 +580,7 @@ def _render_project_detail(project_id: str) -> str:
     final_media_burned_mp4 = final_media_copied.get("burned_final_mp4", "") if isinstance(final_media_copied, dict) else ""
     final_media_srt = final_media_copied.get("srt", "") if isinstance(final_media_copied, dict) else ""
     final_media_vtt = final_media_copied.get("vtt", "") if isinstance(final_media_copied, dict) else ""
+    final_media_thumbnail = final_media_copied.get("thumbnail_png", "") if isinstance(final_media_copied, dict) else ""
 
     return f"""
     <section class="band detail-head">
@@ -889,8 +899,53 @@ def _render_project_detail(project_id: str) -> str:
     </section>
 
     <section class="band">
+      <h2>썸네일 생성/검토</h2>
+      <p class="muted">외부 이미지나 유료 API 없이 로컬 썸네일 PNG와 검토용 SVG를 생성합니다. 사람이 승인해야 최종 업로드 게이트를 통과합니다.</p>
+      <form method="post" action="/thumbnail-gate">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="grid two">
+          <div>
+            <label for="thumbnail_title">썸네일 제목</label>
+            <input id="thumbnail_title" name="title" value="{_escape(script.get('title'))}">
+          </div>
+          <div>
+            <label for="thumbnail_text">썸네일 문구</label>
+            <input id="thumbnail_text" name="thumbnail_text" value="{_escape(script.get('thumbnail_text'))}">
+          </div>
+          <div>
+            <label for="thumbnail_source_note">출처/저작권 메모</label>
+            <input id="thumbnail_source_note" name="source_note" value="로컬 자동 생성 썸네일, 외부 이미지/브랜드/인물 사용 없음">
+          </div>
+          <div>
+            <label for="thumbnail_reviewer_note">검토 메모</label>
+            <input id="thumbnail_reviewer_note" name="reviewer_note" placeholder="예: 문구 가독성 확인, 외부 자산 없음">
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" name="reviewer_decision" value="needs_review">초안 생성</button>
+          <button class="secondary" type="submit" name="reviewer_decision" value="approved">생성 후 승인</button>
+          <span class="muted">상태: {_escape(thumbnail_status)} · 검증 이슈: {_escape(thumbnail_issue_text)}</span>
+        </div>
+      </form>
+      <div class="grid three">
+        <div>
+          <label>thumbnail.png</label>
+          <p><code>{_escape(thumbnail_png or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>검토용 SVG</label>
+          <p><code>{_escape(thumbnail_svg or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(thumbnail_next_step)}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
       <h2>수동 업로드 미디어 패키지</h2>
-      <p class="muted">final_preview.mp4, 선택 번인본, SRT/VTT sidecar 자막을 수동 업로드 패키지의 media 폴더로 묶습니다. 실제 업로드는 실행하지 않습니다.</p>
+      <p class="muted">final_preview.mp4, 선택 번인본, SRT/VTT sidecar 자막, thumbnail.png를 수동 업로드 패키지의 media 폴더로 묶습니다. 실제 업로드는 실행하지 않습니다.</p>
       <form method="post" action="/final-media-package">
         <input type="hidden" name="project_id" value="{_escape(project_id)}">
         <div class="actions">
@@ -915,7 +970,11 @@ def _render_project_detail(project_id: str) -> str:
       <div class="grid three">
         <div><label>MP4</label><p><code>{_escape(final_media_mp4 or '아직 패키징되지 않았습니다.')}</code></p></div>
         <div><label>번인 MP4</label><p><code>{_escape(final_media_burned_mp4 or '선택 사항입니다.')}</code></p></div>
-        <div><label>SRT/VTT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
+        <div><label>썸네일</label><p><code>{_escape(final_media_thumbnail or '아직 패키징되지 않았습니다.')}</code></p></div>
+      </div>
+      <div class="grid two">
+        <div><label>SRT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p></div>
+        <div><label>VTT</label><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
       </div>
     </section>
 
@@ -1560,6 +1619,21 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/subtitle-burn":
                 project_id = params.get("project_id", [""])[0]
                 burn_subtitles_for_video(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/thumbnail-gate":
+                project_id = params.get("project_id", [""])[0]
+                prepare_thumbnail(
+                    project_id,
+                    {
+                        "title": params.get("title", [""])[0],
+                        "thumbnail_text": params.get("thumbnail_text", [""])[0],
+                        "source_note": params.get("source_note", [""])[0],
+                        "reviewer_note": params.get("reviewer_note", [""])[0],
+                        "reviewer_decision": params.get("reviewer_decision", ["needs_review"])[0],
+                    },
+                )
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

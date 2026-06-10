@@ -19,6 +19,7 @@ def summarize_project_gate(project_dir: Path) -> dict[str, Any]:
     render_export = read_json(package_dir / "render_export_status.json", {})
     final_upload = read_json(package_dir / "final_upload_checklist.json", {})
     final_media = read_json(package_dir / "final_media_package.json", {})
+    thumbnail = read_json(package_dir / "thumbnail" / "thumbnail_manifest.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_status = read_json(preview_dir / "mp4_status.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
@@ -37,10 +38,11 @@ def summarize_project_gate(project_dir: Path) -> dict[str, Any]:
         "audio_mix": audio_mix_status.get("status") == "final_video_ready" and (final_dir / "final_preview.mp4").exists(),
         "subtitle_burn_optional": subtitle_burn_status.get("status") in {"subtitle_burn_ready", "ffmpeg_missing", "subtitle_burn_failed", "final_video_missing", "subtitles_missing"} or not (final_dir / "subtitle_burn_status.json").exists(),
         "final_media": final_media.get("status") == "final_media_ready",
+        "thumbnail": thumbnail.get("status") == "thumbnail_ready" and (package_dir / "thumbnail.png").exists(),
         "render_export": render_export.get("status") == "ready_for_manual_upload",
         "final_upload": final_upload.get("status") == "final_upload_ready",
     }
-    order = ["project_review", "compliance", "render_plan", "subtitles", "audio", "gif_preview", "mp4", "audio_mix", "subtitle_burn_optional", "final_media", "render_export", "final_upload"]
+    order = ["project_review", "compliance", "render_plan", "subtitles", "audio", "gif_preview", "mp4", "audio_mix", "subtitle_burn_optional", "thumbnail", "final_media", "render_export", "final_upload"]
     blocking_gate = next((name for name in order if not gates[name]), "complete")
     return {
         "project_status": project.get("status", "unknown"),
@@ -69,6 +71,8 @@ def _next_step(blocking_gate: str, render_export: dict[str, Any], final_upload: 
         return "ffmpeg로 음성/BGM/효과음을 믹싱하고 final_preview.mp4를 생성하세요."
     if blocking_gate == "final_media":
         return "preview.mp4와 SRT/VTT 자막을 수동 업로드 패키지 media 폴더로 묶으세요."
+    if blocking_gate == "thumbnail":
+        return "썸네일 PNG를 생성하고 사람이 검토 승인하세요."
     if blocking_gate == "render_export":
         return str(render_export.get("next_step") or "렌더 승인/export 상태를 검토하세요.")
     if blocking_gate == "final_upload":

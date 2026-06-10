@@ -15,6 +15,7 @@ from .render_preview import create_preview_media
 from .script_lab import create_local_script_draft, normalize_target_duration, script_draft_from_dict
 from .subtitle_burner import burn_subtitles_into_final_video
 from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
+from .thumbnail_gate import build_thumbnail_gate
 from .subtitle_export import create_subtitle_files
 from .upload_checklist import build_final_upload_checklist
 
@@ -150,6 +151,14 @@ def burn_subtitles_for_video(project_id: str) -> dict[str, Any]:
     if not read_json(project_dir / "project.json", {}):
         raise FileNotFoundError(f"Project not found: {project_id}")
     return burn_subtitles_into_final_video(project_id, project_dir)
+
+
+def prepare_thumbnail(project_id: str, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    return build_thumbnail_gate(project_dir, inputs)
 
 
 def package_final_media(project_id: str) -> dict[str, Any]:

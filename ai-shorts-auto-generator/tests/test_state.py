@@ -25,6 +25,7 @@ from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4
 from ai_shorts.final_media_package import build_final_media_package
 from ai_shorts.subtitle_burner import burn_subtitles_into_final_video
 from ai_shorts.subtitle_export import create_subtitle_files
+from ai_shorts.thumbnail_gate import build_thumbnail_gate
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
 from ai_shorts.production_readiness import build_production_readiness
@@ -325,6 +326,22 @@ def test_subtitle_burner_creates_burned_final_video(tmp_path, monkeypatch) -> No
     assert (final_dir / "final_burned_subtitles.mp4").exists()
 
 
+def test_thumbnail_gate_requires_human_approval(tmp_path) -> None:
+    write_json(
+        tmp_path / "script_draft.json",
+        {"title": "테스트 제목", "thumbnail_text": "바로 바꾸는 3가지"},
+    )
+
+    draft_manifest = build_thumbnail_gate(tmp_path, {"reviewer_decision": "needs_review"})
+    ready_manifest = build_thumbnail_gate(tmp_path, {"reviewer_decision": "approved", "reviewer_note": "확인 완료"})
+
+    assert draft_manifest["status"] == "thumbnail_needs_review"
+    assert "human_thumbnail_review_required" in draft_manifest["validation"]["issues"]
+    assert ready_manifest["status"] == "thumbnail_ready"
+    assert (tmp_path / "exports" / "manual_upload_package" / "thumbnail.png").exists()
+    assert (tmp_path / "exports" / "manual_upload_package" / "thumbnail" / "thumbnail_review.svg").exists()
+
+
 def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     package_dir = tmp_path / "exports" / "manual_upload_package"
     preview_dir = tmp_path / "renders" / "preview"
@@ -362,6 +379,11 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
         tmp_path / "renders" / "final" / "subtitle_burn_status.json",
         {"status": "subtitle_burn_ready", "burned_video_path": str(burned_video)},
     )
+    write_json(
+        tmp_path / "script_draft.json",
+        {"title": "테스트 제목", "thumbnail_text": "바로 바꾸는 3가지"},
+    )
+    build_thumbnail_gate(tmp_path, {"reviewer_decision": "approved", "reviewer_note": "확인 완료"})
 
     manifest = build_final_media_package(tmp_path)
 
@@ -371,6 +393,7 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     assert (package_dir / "media" / "final_burned_subtitles.mp4").exists()
     assert (package_dir / "media" / "subtitles.srt").exists()
     assert (package_dir / "media" / "subtitles.vtt").exists()
+    assert (package_dir / "media" / "thumbnail.png").exists()
     assert (package_dir / "media" / "audio" / "audio_manifest.json").exists()
     assert (package_dir / "media" / "audio" / "mixed_audio.m4a").exists()
     assert manifest["subtitle_mode"] == "burned_with_sidecar_fallback"
@@ -395,6 +418,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert "audio_ready" in checklist["missing"]
     assert "audio_mix_ready" in checklist["missing"]
     assert "final_media_ready" in checklist["missing"]
+    assert "thumbnail_ready" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()
 
