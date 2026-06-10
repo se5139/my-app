@@ -6,6 +6,7 @@ from typing import Any
 
 from .paths import DATA_DIR, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
+from .restore_guide import new_pc_start_markdown, restore_note, restore_steps
 from .state import now_iso, read_json, write_json
 
 
@@ -29,7 +30,8 @@ def create_operations_snapshot() -> dict[str, Any]:
         "included_files": [],
         "zip_path": str(zip_path),
         "readme_path": str(readme_path),
-        "restore_note": "Copy the extracted data folder into ai-shorts-auto-generator/data on another PC, then start the web app.",
+        "restore_note": restore_note(),
+        "restore_steps": restore_steps(),
     }
 
     app_state = read_json(DATA_DIR / "app_state.json", {"projects": []})
@@ -85,20 +87,39 @@ def _snapshot_readme(manifest: dict[str, Any]) -> str:
     ]
     if not project_lines:
         project_lines = ["- No saved projects were found."]
-    return "\n".join(
+    lines = [
+        "# AI Shorts Operations Snapshot",
+        "",
+        f"Created: {manifest.get('created_at')}",
+        f"Project count: {manifest.get('project_count')}",
+        "",
+        "## Projects",
+        "",
+        *project_lines,
+        "",
+        "## Restore",
+        "",
+        str(manifest.get("restore_note")),
+        "",
+    ]
+    for step in manifest.get("restore_steps", []):
+        lines.extend(
+            [
+                f"### {step.get('title', '')}",
+                "",
+                str(step.get("body", "")),
+                "",
+                "```powershell",
+                str(step.get("command", "")),
+                "```",
+                "",
+            ]
+        )
+    lines.extend(
         [
-            "# AI Shorts Operations Snapshot",
+            "## New PC Start",
             "",
-            f"Created: {manifest.get('created_at')}",
-            f"Project count: {manifest.get('project_count')}",
-            "",
-            "## Projects",
-            "",
-            *project_lines,
-            "",
-            "## Restore",
-            "",
-            str(manifest.get("restore_note")),
-            "",
+            new_pc_start_markdown(manifest),
         ]
     )
+    return "\n".join(lines)

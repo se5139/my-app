@@ -119,6 +119,17 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - YouTube Studio style CSV paste import for bulk growth-learning performance records
 - CSV import result feedback with imported and skipped row counts
 - operations snapshot export that bundles local `data` state into a handoff zip and markdown summary
+- new-PC restore guide shown in the web UI and documented in `docs/NEW_PC_START_HERE.md`
+
+## New PC Restore Guide
+
+Use `docs/NEW_PC_START_HERE.md` when continuing from another PC. The short version:
+
+1. Clone `https://github.com/se5139/my-app.git`.
+2. Open `my-app\ai-shorts-auto-generator`.
+3. Extract the latest operations snapshot zip and copy its `data` folder into `ai-shorts-auto-generator\data`.
+4. Run `$env:PYTHONPATH='src'; python -m ai_shorts.web_app`.
+5. Commit and push after each completed unit of work.
 
 ## Local Git Setup For This PC
 

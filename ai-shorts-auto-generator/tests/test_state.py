@@ -13,6 +13,7 @@ from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
 from ai_shorts.project_dashboard import summarize_project_gate
+from ai_shorts.restore_guide import new_pc_start_markdown, restore_steps
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
 from ai_shorts.weekly_queue import mark_slot_promoted, save_weekly_plan_queue
@@ -251,4 +252,13 @@ def test_operations_snapshot_creates_zip(tmp_path, monkeypatch) -> None:
     snapshot = create_operations_snapshot()
     assert snapshot["project_count"] == 1
     assert snapshot["zip_path"].endswith(".zip")
+    assert snapshot["restore_steps"]
     assert (data_dir / "snapshots").exists()
+
+
+def test_restore_guide_has_repo_and_snapshot_steps() -> None:
+    steps = restore_steps()
+    markdown = new_pc_start_markdown({"project_count": 1})
+    assert any("github.com/se5139/my-app.git" in step["command"] for step in steps)
+    assert any("data folder" in step["body"] for step in steps)
+    assert "New PC Start Here" in markdown

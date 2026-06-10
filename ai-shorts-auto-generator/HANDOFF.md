@@ -386,6 +386,24 @@ Next recommended work:
 
 - Add snapshot restore guidance UI and a one-page "new PC start here" document.
 
+## 2026-06-10 Snapshot Restore Guide Step
+
+Added new-PC continuation guidance:
+
+- `src/ai_shorts/restore_guide.py` centralizes repository clone, snapshot copy, web start, and save-after-work steps.
+- The home page now shows a `새 PC에서 이어하기` guide below the operations snapshot action.
+- Operations snapshot Markdown now includes restore steps and a generated new-PC start section.
+- `docs/NEW_PC_START_HERE.md` gives a one-page handoff guide for another PC.
+
+Verification target:
+
+- Compile restore guide, operations snapshot, web app, and tests.
+- Smoke-test snapshot creation to confirm restore steps are included.
+
+Next recommended work:
+
+- Add a local environment check panel that shows Git, Python, data folder, and ffmpeg readiness from inside the web UI.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

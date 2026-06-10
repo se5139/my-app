@@ -10,6 +10,7 @@ from .growth_learning import add_performance_record, apply_growth_learning_to_to
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
+from .restore_guide import restore_steps
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
 from .weekly_queue import mark_slot_promoted, save_weekly_plan_queue
@@ -88,6 +89,14 @@ def _latest_project_summary(limit: int = 8) -> str:
             "</tr>"
         )
     return "<table><thead><tr><th>초안</th><th>상태</th><th>현재 막힌 단계</th><th>다음 작업</th><th>ID</th><th>패키지 위치</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+
+
+def _restore_guide_html() -> str:
+    items = "".join(
+        f"<li><strong>{_escape(step['title'])}</strong><br><span>{_escape(step['body'])}</span><br><code>{_escape(step['command'])}</code></li>"
+        for step in restore_steps()
+    )
+    return f'<ol class="scenes">{items}</ol>'
 
 
 def _render_project_detail(project_id: str) -> str:
@@ -757,6 +766,12 @@ def _render_page(
           <span class="muted">스냅샷은 data/snapshots 아래에 저장됩니다.</span>
         </div>
       </form>
+    </section>
+
+    <section class="band">
+      <h2>새 PC에서 이어하기</h2>
+      <p class="muted">GitHub 코드와 운영 스냅샷을 함께 사용하면 다른 PC에서도 같은 작업 상태로 복원할 수 있습니다.</p>
+      {_restore_guide_html()}
     </section>
   </main>
 </body>
