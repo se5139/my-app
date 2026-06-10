@@ -3881,6 +3881,141 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
 </html>"""
 
 
+def bulk_action_label(action: str) -> str:
+    return {
+        "review": "수정계획 생성",
+        "regen": "재생성 실행",
+        "final": "최종 후보 ZIP 생성",
+        "package": "제출 전 패키지 생성",
+    }.get(action, "수정계획 생성")
+
+
+def bulk_action_plan(names: list[str], action: str) -> list[dict[str, str]]:
+    plan: list[dict[str, str]] = []
+    for name in names:
+        output_dir = safe_output_dir_by_name(name)
+        if output_dir is None:
+            plan.append({"name": name, "status": "missing", "reason": "결과 폴더를 찾을 수 없음"})
+            continue
+        if action == "package":
+            if (output_dir / "pre_submission_package" / "pre_submission_manifest.json").exists():
+                status, reason = "skip", "이미 제출 전 패키지가 있음"
+            elif not (output_dir / "final_candidates" / "final_candidates_report.json").exists():
+                status, reason = "block", "최종 후보 ZIP이 아직 없음"
+            else:
+                status, reason = "create", "제출 전 패키지 생성 가능"
+        elif action == "final":
+            if (output_dir / "final_candidates" / "final_candidates_report.json").exists():
+                status, reason = "skip", "이미 최종 후보 ZIP이 있음"
+            elif not (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
+                status, reason = "block", "재생성 결과가 아직 없음"
+            else:
+                status, reason = "create", "재생성본 우선으로 최종 후보 ZIP 생성 가능"
+        elif action == "regen":
+            if (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
+                status, reason = "skip", "이미 재생성 결과가 있음"
+            elif not (output_dir / "review_action_plan.json").exists():
+                status, reason = "block", "수정계획이 아직 없음"
+            else:
+                status, reason = "create", "수정계획 기준 재생성 가능"
+        else:
+            if (output_dir / "review_action_plan.json").exists():
+                status, reason = "skip", "이미 수정계획이 있음"
+            else:
+                status, reason = "create", "수정계획 생성 가능"
+        plan.append({"name": output_dir.name, "status": status, "reason": reason})
+    return plan
+
+
+def bulk_action_preview_page(
+    query: str,
+    stage_filter: str,
+    action: str,
+    names: list[str],
+    plan: list[dict[str, str]],
+) -> str:
+    label = bulk_action_label(action)
+    status_labels = {"create": "생성 예정", "skip": "건너뜀", "block": "막힘", "missing": "찾을 수 없음"}
+    counts = {key: sum(1 for item in plan if item.get("status") == key) for key in status_labels}
+    rows = ""
+    for item in plan:
+        status = item.get("status", "")
+        rows += f"""
+        <tr>
+          <td><span class="badge {html.escape(status)}">{html.escape(status_labels.get(status, status))}</span></td>
+          <td>{html.escape(item.get("name", ""))}</td>
+          <td>{html.escape(item.get("reason", ""))}</td>
+        </tr>
+        """
+    if not rows:
+        rows = "<tr><td colspan='3'>선택된 결과가 없습니다.</td></tr>"
+    hidden_names = "".join(f"<input type='hidden' name='names' value='{html.escape(name)}'>" for name in names)
+    can_run = bool(counts.get("create", 0))
+    confirm_button = (
+        f"<button type='submit'>확인하고 {html.escape(label)} 실행</button>"
+        if can_run
+        else "<button type='submit' disabled>실행할 항목 없음</button>"
+    )
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>일괄 작업 확인</title>
+  <style>
+    body {{ margin:0; color:#2d2424; font-family:"Malgun Gothic", sans-serif; background:linear-gradient(135deg,#fffaf0,#eef8ef); }}
+    main {{ width:min(980px, calc(100% - 32px)); margin:0 auto; padding:42px 0; }}
+    .panel {{ border:2px solid #ead8bc; border-radius:28px; background:rgba(255,255,255,.9); padding:24px; box-shadow:0 18px 50px rgba(96,69,45,.11); margin-bottom:18px; }}
+    h1 {{ margin:0 0 10px; font-size:clamp(30px,5vw,48px); }}
+    p, td, th {{ line-height:1.6; color:#6f625f; }}
+    .summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }}
+    .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
+    .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
+    table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
+    th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    th {{ color:#2d2424; background:#fff3d8; }}
+    .badge {{ display:inline-block; border-radius:999px; padding:5px 9px; font-weight:900; border:1px solid #d8ccbc; background:#f7f4ef; color:#5d534e; }}
+    .badge.create {{ background:#dff8eb; border-color:#83d7b6; color:#245d46; }}
+    .badge.block, .badge.missing {{ background:#fff0ea; border-color:#f0b29b; color:#8a412d; }}
+    button, a {{ display:inline-block; border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; color:#1e3830; font-weight:900; text-decoration:none; cursor:pointer; }}
+    button:disabled {{ opacity:.55; cursor:not-allowed; }}
+    .actions {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>일괄 작업 확인</h1>
+    <p><strong>{html.escape(label)}</strong>을 실행하기 전에 처리 결과를 미리 확인합니다. 생성 예정 항목만 실제 파일이 만들어집니다.</p>
+    <div class="summary">
+      <div class="metric"><span>생성 예정</span><strong>{counts.get('create', 0)}</strong></div>
+      <div class="metric"><span>건너뜀</span><strong>{counts.get('skip', 0)}</strong></div>
+      <div class="metric"><span>막힘</span><strong>{counts.get('block', 0)}</strong></div>
+      <div class="metric"><span>찾을 수 없음</span><strong>{counts.get('missing', 0)}</strong></div>
+    </div>
+  </section>
+  <section class="panel">
+    <table>
+      <thead><tr><th>상태</th><th>결과 폴더</th><th>사유</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <form class="actions" method="post" action="/bulk-review-action">
+      <input type="hidden" name="q" value="{html.escape(query)}">
+      <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+      <input type="hidden" name="bulk_action" value="{html.escape(action)}">
+      <input type="hidden" name="confirm" value="1">
+      {hidden_names}
+      {confirm_button}
+      <a href="/results?stage={html.escape(stage_filter)}&q={quote(query)}">목록으로 돌아가기</a>
+    </form>
+  </section>
+</main>
+</body>
+</html>"""
+
+
 def result_detail_page(name: str, message: str = "") -> str:
     output_dir = safe_output_dir_by_name(name)
     if output_dir is None:
@@ -7706,11 +7841,17 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             form = parse_qs(body.decode("utf-8", errors="replace"))
             action = form_value(form, "bulk_action", "review")
+            query = form_value(form, "q", "")
+            stage_filter = form_value(form, "stage", "all")
+            names = form.get("names", [])
+            if form_value(form, "confirm", "0") != "1":
+                self.respond(200, bulk_action_preview_page(query, stage_filter, action, names, bulk_action_plan(names, action)))
+                return
             created = 0
             skipped = 0
             missing = 0
             blocked = 0
-            for name in form.get("names", []):
+            for name in names:
                 output_dir = safe_output_dir_by_name(name)
                 if output_dir is None:
                     missing += 1
@@ -7748,7 +7889,7 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     build_review_action_plan(output_dir, [], "weak", "목록에서 일괄 생성한 수정 계획")
                     created += 1
-            if not form.get("names", []):
+            if not names:
                 message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
             elif action == "package":
                 message = f"일괄 제출 전 패키지 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 최종후보 없음 {blocked}개 / 찾을 수 없음 {missing}개"
@@ -7760,7 +7901,7 @@ class Handler(BaseHTTPRequestHandler):
                 message = f"일괄 수정계획 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 찾을 수 없음 {missing}개"
             self.respond(
                 200,
-                results_page(form_value(form, "q", ""), form_value(form, "stage", "all"), message),
+                results_page(query, stage_filter, message),
             )
             return
         if self.path == "/review-action":
