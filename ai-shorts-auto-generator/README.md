@@ -117,6 +117,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - growth learning performance record form for views, retention, CTR, watch time, notes, and computed growth score
 - growth learning score boosts for weekly plans when candidate topics match prior performance records
 - YouTube Studio style CSV paste import for bulk growth-learning performance records
+- CSV import result feedback with imported and skipped row counts
 
 ## Local Git Setup For This PC
 

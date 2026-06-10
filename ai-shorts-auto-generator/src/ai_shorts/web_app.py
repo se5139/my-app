@@ -440,7 +440,13 @@ def _render_project_detail(project_id: str) -> str:
     """
 
 
-def _render_page(result: dict | None = None, plan: dict | None = None, error: str = "", detail_html: str = "") -> bytes:
+def _render_page(
+    result: dict | None = None,
+    plan: dict | None = None,
+    growth_import: dict | None = None,
+    error: str = "",
+    detail_html: str = "",
+) -> bytes:
     result_html = ""
     if result:
         script = result.get("script", {})
@@ -497,6 +503,23 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
           <p>{_escape(plan.get('automation_note'))}</p>
           <p class="muted">선택한 슬롯은 즉시 autosave 프로젝트로 저장되고 최근 초안 목록에 나타납니다.</p>
           <ol class="scenes">{slots}</ol>
+        </section>
+        """
+
+    growth_import_html = ""
+    if growth_import:
+        skipped_rows = "".join(
+            f"<li>row {_escape(item.get('row'))}: {_escape(item.get('reason'))}</li>"
+            for item in growth_import.get("skipped", [])
+        )
+        if not skipped_rows:
+            skipped_rows = "<li>없음</li>"
+        growth_import_html = f"""
+        <section class="band">
+          <h2>CSV 가져오기 결과</h2>
+          <p>성공 <span class="status">{int(growth_import.get('imported_count', 0))}</span> · 스킵 {int(growth_import.get('skipped_count', 0))}</p>
+          <label>스킵된 행</label>
+          <ol class="scenes">{skipped_rows}</ol>
         </section>
         """
 
@@ -702,6 +725,7 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
 
     {result_html}
     {plan_html}
+    {growth_import_html}
 
     <section class="band">
       <h2>최근 저장 초안</h2>
@@ -764,8 +788,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(_render_page())
                 return
             if self.path == "/growth-csv-import":
-                import_performance_csv(params.get("csv_text", [""])[0])
-                self._send(_render_page())
+                growth_import = import_performance_csv(params.get("csv_text", [""])[0])
+                self._send(_render_page(growth_import=growth_import))
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]

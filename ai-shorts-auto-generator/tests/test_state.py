@@ -226,3 +226,9 @@ def test_growth_learning_imports_csv_rows(tmp_path, monkeypatch) -> None:
     assert records[0]["title"] == "CSV Topic"
     assert records[0]["views"] == 1500
     assert records[0]["growth_score"] > 0
+
+
+def test_web_app_renders_growth_import_result() -> None:
+    html = _render_page(growth_import={"imported_count": 2, "skipped_count": 1, "skipped": [{"row": 4, "reason": "missing_title"}]}).decode("utf-8")
+    assert "CSV 가져오기 결과" in html
+    assert "missing_title" in html

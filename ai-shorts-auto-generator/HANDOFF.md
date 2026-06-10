@@ -353,6 +353,22 @@ Next recommended work:
 
 - Add CSV import result feedback on the page so the user can see imported/skipped row counts.
 
+## 2026-06-10 CSV Import Result Feedback Step
+
+Added CSV import result feedback:
+
+- The CSV import route now passes `imported_count`, `skipped_count`, and skipped row details back to the page.
+- The home page displays a `CSV 가져오기 결과` section after import.
+
+Verification target:
+
+- Compile web and tests.
+- End-to-end paste CSV data and verify the page shows imported/skipped counts.
+
+Next recommended work:
+
+- Add an operations snapshot/export button so the whole local project state can be backed up as a handoff bundle.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
