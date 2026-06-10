@@ -504,6 +504,33 @@ def safe_phrase_candidates(emotion_key: str, used_phrases: set[str], limit: int 
     return candidates
 
 
+def balanced_emotion_key(
+    preferred_key: str,
+    sequence_key: str,
+    emotion_counts: dict[str, int],
+    total_count: int,
+) -> str:
+    emotion_keys = [str(emotion["key"]) for emotion in EMOTION_PRESETS]
+    max_per_emotion = max(2, math.ceil(total_count / max(1, len(emotion_keys))) + 1)
+    if emotion_counts.get(preferred_key, 0) < max_per_emotion:
+        return preferred_key
+    if emotion_counts.get(sequence_key, 0) < max_per_emotion:
+        return sequence_key
+    return min(emotion_keys, key=lambda key: (emotion_counts.get(key, 0), emotion_keys.index(key)))
+
+
+def replacement_phrase_for_slot(
+    preferred_emotion_key: str,
+    sequence_emotion_key: str,
+    used_phrase_keys: set[str],
+) -> tuple[str, str]:
+    for emotion_key in [preferred_emotion_key, sequence_emotion_key, *[str(emotion["key"]) for emotion in EMOTION_PRESETS]]:
+        candidates = safe_phrase_candidates(emotion_key, used_phrase_keys, 8)
+        if candidates:
+            return candidates[0], emotion_key
+    return "", preferred_emotion_key
+
+
 def expression_diversity_summary(expression_plan: list[dict[str, str]]) -> dict[str, object]:
     emotion_counts: dict[str, int] = {}
     gesture_counts: dict[str, int] = {}
@@ -1167,6 +1194,8 @@ def build_phrase_plan(
 ) -> list[dict[str, str]]:
     plan: list[dict[str, str]] = []
     seen: dict[str, int] = {}
+    used_phrase_keys: set[str] = set()
+    emotion_counts: dict[str, int] = {}
     if phrase_weights:
         learned_phrases = [
             str(value)
@@ -1183,25 +1212,63 @@ def build_phrase_plan(
         matched_emotion_key, match_reason = match_phrase_emotion(phrase, slot_index)
         if source == "auto" and match_reason == "fallback_sequence":
             matched_emotion_key = str(sequence_emotion["key"])
-        emotion = emotion_for_key(matched_emotion_key)
         normalized = normalize_phrase(phrase)
         seen[normalized] = seen.get(normalized, 0) + 1
-        if seen[normalized] > 1 and source == "auto":
-            phrase = f"{phrase} {seen[normalized]}"
+        compact_key = compact_phrase_key(normalized)
+        duplicate_detected = bool(compact_key and compact_key in used_phrase_keys)
+        risk_detected = any(keyword.lower() in normalized.lower() for keyword in PHRASE_RISK_KEYWORDS)
+        balanced_key = balanced_emotion_key(
+            matched_emotion_key,
+            str(sequence_emotion["key"]),
+            emotion_counts,
+            total_count,
+        )
+        original_phrase = ""
+        rebalance_reason = ""
+        if duplicate_detected or risk_detected:
+            replacement, replacement_emotion_key = replacement_phrase_for_slot(
+                balanced_key,
+                str(sequence_emotion["key"]),
+                used_phrase_keys,
+            )
+            if replacement:
+                original_phrase = phrase
+                phrase = replacement
+                source = f"{source}_auto_balanced"
+                rebalance_reason = "duplicate" if duplicate_detected else "risk_keyword"
+                matched_emotion_key = replacement_emotion_key
+                match_reason = f"auto_balance:{rebalance_reason}"
+                normalized = normalize_phrase(phrase)
+                compact_key = compact_phrase_key(normalized)
+        if not duplicate_detected and not risk_detected:
+            matched_emotion_key = balanced_key
+            if matched_emotion_key != str(sequence_emotion["key"]) and match_reason == "fallback_sequence":
+                match_reason = "balanced_sequence"
+        if compact_key in used_phrase_keys and source == "auto":
+            phrase = f"{phrase}!"
             matched_emotion_key, match_reason = match_phrase_emotion(phrase, slot_index)
             if match_reason == "fallback_sequence":
                 matched_emotion_key = str(sequence_emotion["key"])
-            emotion = emotion_for_key(matched_emotion_key)
+            normalized = normalize_phrase(phrase)
+            compact_key = compact_phrase_key(normalized)
+        emotion = emotion_for_key(matched_emotion_key)
+        if compact_key:
+            used_phrase_keys.add(compact_key)
+        emotion_counts[str(emotion["key"])] = emotion_counts.get(str(emotion["key"]), 0) + 1
+        item = {
+            "slot": str(slot_index + 1),
+            "phrase": phrase,
+            "source": source,
+            "emotion_key": str(emotion["key"]),
+            "emotion": str(emotion["label"]),
+            "emotion_match_reason": match_reason,
+            "sequence_emotion_key": str(sequence_emotion["key"]),
+        }
+        if original_phrase:
+            item["original_phrase"] = original_phrase
+            item["auto_balance_reason"] = rebalance_reason
         plan.append(
-            {
-                "slot": str(slot_index + 1),
-                "phrase": phrase,
-                "source": source,
-                "emotion_key": str(emotion["key"]),
-                "emotion": str(emotion["label"]),
-                "emotion_match_reason": match_reason,
-                "sequence_emotion_key": str(sequence_emotion["key"]),
-            }
+            item
         )
     return plan
 
