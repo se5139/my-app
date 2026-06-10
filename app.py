@@ -3491,6 +3491,7 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
     final_report = read_json_file(output_dir / "final_candidates" / "final_candidates_report.json", {})
     final_audit = read_json_file(output_dir / "final_candidates" / "final_candidates_audit_report.json", {})
     readiness = read_json_file(output_dir / "submission_readiness_report.json", {})
+    kakao_policy_report = latest_kakao_policy_link_report()
     if not isinstance(report, dict):
         report = {}
     if not isinstance(final_report, dict):
@@ -3499,6 +3500,8 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
         final_audit = {}
     if not isinstance(readiness, dict):
         readiness = {}
+    if not isinstance(kakao_policy_report, dict):
+        kakao_policy_report = {}
 
     final_zip = output_dir / "final_candidates" / "final_candidates_submit.zip"
     evidence_zip = output_dir / "creator_evidence_package.zip"
@@ -3518,6 +3521,14 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
         "final_audit_status": final_audit.get("status", ""),
         "validation_status": final_report.get("validation_status", ""),
         "submission_readiness": readiness.get("decision_label", ""),
+        "kakao_policy_link_check": {
+            "status": kakao_policy_report.get("status", "not_checked"),
+            "created_at": kakao_policy_report.get("created_at", ""),
+            "fail_count": kakao_policy_report.get("fail_count", 0),
+            "warn_count": kakao_policy_report.get("warn_count", 0),
+            "report_file": kakao_policy_report.get("json", ""),
+            "api_usage": kakao_policy_report.get("kakao_rest_api_usage", "not_used"),
+        },
         "included_files": [],
         "manual_required": [
             "카카오 이모티콘 스튜디오 최신 규격을 다시 확인하세요.",
@@ -3542,14 +3553,30 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
         output_dir / "final_candidates" / "final_candidates_validation_report.json",
         output_dir / "final_candidates" / "final_candidates_audit_report.json",
     ]
+    kakao_policy_json = Path(str(kakao_policy_report.get("json", ""))) if kakao_policy_report.get("json") else None
+    if kakao_policy_json and kakao_policy_json.exists():
+        include_files.append(kakao_policy_json)
     existing_files = [path for path in include_files if path.exists()]
-    manifest["included_files"] = [str(path.relative_to(output_dir)) for path in existing_files]
+    output_dir_resolved = output_dir.resolve()
+
+    def is_inside_output(path: Path) -> bool:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return False
+        return resolved == output_dir_resolved or output_dir_resolved in resolved.parents
+
+    manifest["included_files"] = [
+        str(path.relative_to(output_dir)) if is_inside_output(path) else f"kakao_policy/{path.name}"
+        for path in existing_files
+    ]
     package_zip = package_dir / "pre_submission_review_package.zip"
     manifest["zip"] = str(package_zip.relative_to(output_dir))
     manifest["html"] = str((package_dir / "pre_submission_summary.html").relative_to(output_dir))
     manifest["file_count"] = len(existing_files) + 2
 
     checklist_html = html_list(manifest["manual_required"], "수동 확인 항목이 없습니다.")
+    kakao_policy = manifest["kakao_policy_link_check"]
     summary_html = f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -3573,6 +3600,7 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
     <p><strong>캐릭터</strong>: {html.escape(str(manifest.get("character_name", "")))}</p>
     <p><strong>상품</strong>: {html.escape(str(manifest.get("product_label", "")))}</p>
     <p><span class="pill">최종 검수 {html.escape(str(manifest.get("final_audit_status", "")))}</span><span class="pill">ZIP 검증 {html.escape(str(manifest.get("validation_status", "")))}</span><span class="pill">제출 준비 {html.escape(str(manifest.get("submission_readiness", "")))}</span></p>
+    <p><span class="pill">Kakao 링크 점검 {html.escape(str(kakao_policy.get("status", "")))}</span><span class="pill">REST API {html.escape(str(kakao_policy.get("api_usage", "not_used")))}</span></p>
     <p>이 패키지는 제출 전 점검용입니다. 실제 제출 전에는 사람이 최종 파일과 증빙을 다시 확인해야 합니다.</p>
   </section>
   <section>
@@ -3589,6 +3617,7 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
       <li><code>final_candidates_submit.zip</code>: 최종 후보 이미지 묶음</li>
       <li><code>creator_evidence_package.zip</code>: 제작 증빙 묶음</li>
       <li><code>final_candidates_audit_report.json</code>: 최종 후보 파일별 검수</li>
+      <li><code>kakao_policy_link_report.json</code>: Kakao 공식 링크 접근성 점검 기록, 있는 경우 동봉</li>
       <li><code>pre_submission_manifest.json</code>: 이 패키지 인덱스</li>
     </ul>
   </section>
@@ -3602,7 +3631,12 @@ def build_pre_submission_package(output_dir: Path) -> dict[str, object]:
         archive.write(package_dir / "pre_submission_manifest.json", "pre_submission_manifest.json")
         archive.write(package_dir / "pre_submission_summary.html", "pre_submission_summary.html")
         for file_path in existing_files:
-            archive.write(file_path, file_path.relative_to(output_dir))
+            if is_inside_output(file_path):
+                archive.write(file_path, file_path.relative_to(output_dir))
+            elif file_path.name.endswith("_kakao_policy_link_report.json"):
+                archive.write(file_path, f"kakao_policy/{file_path.name}")
+            else:
+                archive.write(file_path, file_path.name)
     return manifest
 
 
@@ -5209,6 +5243,21 @@ def result_detail_page(name: str, message: str = "") -> str:
         [str(item) for item in pre_submission_files[:12]],
         "아직 제출 전 패키지에 포함된 파일 목록이 없습니다.",
     )
+    kakao_policy_report = latest_kakao_policy_link_report()
+    kakao_policy_status = str(kakao_policy_report.get("status", "not_checked")) if isinstance(kakao_policy_report, dict) else "not_checked"
+    kakao_policy_summary = (
+        f"최근 점검 {html.escape(str(kakao_policy_report.get('created_at', '')))} / "
+        f"상태 {html.escape(kakao_policy_status)} / "
+        f"실패 {html.escape(str(kakao_policy_report.get('fail_count', 0)))} / "
+        f"경고 {html.escape(str(kakao_policy_report.get('warn_count', 0)))}"
+        if isinstance(kakao_policy_report, dict) and kakao_policy_report
+        else "아직 Kakao 공식 링크 점검 기록이 없습니다."
+    )
+    kakao_policy_link = (
+        f"<a class='action-button' href='/{html.escape(str(kakao_policy_report.get('json', '')).replace(chr(92), '/'))}'>Kakao 링크 점검 JSON 열기</a>"
+        if isinstance(kakao_policy_report, dict) and kakao_policy_report.get("json")
+        else ""
+    )
     detail_stage_labels = [
         ("생성", True),
         ("수정계획", isinstance(review_action_plan, dict) and bool(review_action_plan)),
@@ -5216,6 +5265,7 @@ def result_detail_page(name: str, message: str = "") -> str:
         ("최종후보", isinstance(final_candidates, dict) and bool(final_candidates)),
         ("상세검수", isinstance(final_audit, dict) and bool(final_audit)),
         ("제출전팩", isinstance(pre_submission, dict) and bool(pre_submission)),
+        ("Kakao링크", bool(isinstance(kakao_policy_report, dict) and kakao_policy_report)),
     ]
     detail_done_count = sum(1 for _, enabled in detail_stage_labels if enabled)
     detail_progress = round(detail_done_count / len(detail_stage_labels) * 100)
@@ -5670,6 +5720,20 @@ def result_detail_page(name: str, message: str = "") -> str:
     <h2>최종 후보 ZIP 상세 검수</h2>
     <p>최종 후보 폴더와 ZIP을 다시 읽어 파일명, 선택 출처, 형식, 크기, 용량, 프레임 수를 확인합니다.</p>
     {final_audit_html}
+  </section>
+  <section class="panel">
+    <h2>Kakao 공식 링크 점검</h2>
+    <p>{kakao_policy_summary}</p>
+    <p>공개 웹 링크 접근성만 확인하며 Kakao REST API 키를 사용하지 않습니다. 자동 제출 기능이 아니라 제출 전 참고 링크 상태 점검입니다.</p>
+    <div class="button-row">
+      <a class="action-button" href="/kakao-policy-check">Kakao 링크 점검 화면</a>
+      {kakao_policy_link}
+    </div>
+    <form class="action-form" method="post" action="/kakao-policy-check/run">
+      <div class="button-row">
+        <button class="action-button secondary" type="submit">Kakao 공식 링크 다시 점검</button>
+      </div>
+    </form>
   </section>
   <section class="panel">
     <h2>제출 전 패키지</h2>
