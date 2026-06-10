@@ -29,6 +29,7 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 from modules.kakao_studio_excel import KakaoStudioExcelLearningEngine
+from modules.performance_dashboard import PerformanceDashboardEngine
 
 
 APP_NAME = "Kakao Emoticon Maker v100 Clean"
@@ -2590,7 +2591,7 @@ def system_status_page() -> str:
   <main>
     <section class="panel">
       <h1>실행 상태</h1>
-      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/results">최근 결과물</a><a class="button" href="/excel-analysis">엑셀 분석</a><a class="button" href="/memory">진화 메모리</a><a class="button" href="/api-settings">API 키 안내</a><a class="button" href="/release-check">배포 점검</a></p>
+      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/results">최근 결과물</a><a class="button" href="/excel-analysis">엑셀 분석</a><a class="button" href="/performance-dashboard">성과 대시보드</a><a class="button" href="/memory">진화 메모리</a><a class="button" href="/api-settings">API 키 안내</a><a class="button" href="/release-check">배포 점검</a></p>
     </section>
     <section class="panel">
       <h2>웹서버 비용</h2>
@@ -3062,7 +3063,7 @@ def excel_analysis_page(message: str = "", report: dict[str, object] | None = No
 </head>
 <body>
   <main>
-    <p><a class="button secondary" href="/">제작 화면</a><a class="button secondary" href="/results">최근 결과물</a><a class="button secondary" href="/status">실행 상태</a></p>
+    <p><a class="button secondary" href="/">제작 화면</a><a class="button secondary" href="/results">최근 결과물</a><a class="button secondary" href="/performance-dashboard">성과 대시보드</a><a class="button secondary" href="/status">실행 상태</a></p>
     <h1>카카오 엑셀 통계 분석</h1>
     <p class="hint">카카오 판매내역과 이모티콘 플러스 발신 통계 엑셀을 로컬에서만 분석합니다. 외부 API 호출이나 비용 발생 호출은 없습니다.</p>
     {notice}
@@ -3118,6 +3119,126 @@ def run_excel_analysis(form: dict[str, list[str]], files: dict[str, tuple[str, b
         sales_xlsx=sales_path,
         project_name=project_name,
         confirm_save=confirm_save,
+    )
+    return report.to_dict()
+
+
+def latest_performance_dashboard_report() -> dict[str, object]:
+    root = OUTPUT_ROOT / "performance_dashboard"
+    reports = sorted(root.glob("performance_dashboard_v40_*/report/performance_dashboard_v40.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not reports:
+        return {}
+    payload = read_json_file(reports[0], {})
+    if isinstance(payload, dict):
+        payload.setdefault("json_path", str(reports[0]))
+        payload.setdefault("html_path", str(reports[0].with_suffix(".html")))
+        return payload
+    return {}
+
+
+def performance_dashboard_page(message: str = "", report: dict[str, object] | None = None) -> str:
+    report = report or latest_performance_dashboard_report()
+    files = report.get("files", {}) if isinstance(report, dict) else {}
+    if not isinstance(files, dict):
+        files = {}
+    rows = report.get("dashboard_rows", []) if isinstance(report, dict) else []
+    metrics = report.get("portfolio_metrics", {}) if isinstance(report, dict) else {}
+    strategy = report.get("strategy_recommendations", []) if isinstance(report, dict) else []
+    plan = report.get("next_production_plan", []) if isinstance(report, dict) else []
+    summary_html = "<p>아직 성과 대시보드 리포트가 없습니다. 먼저 엑셀 분석을 실행한 뒤 대시보드를 생성하세요.</p>"
+    if isinstance(report, dict) and report:
+        top_rows = "".join(
+            f"<tr><td>{html.escape(str(item.get('emoticon_name', '')))}</td>"
+            f"<td>{html.escape(str(item.get('sent_count', 0)))}</td>"
+            f"<td>{html.escape(str(item.get('user_count', 0)))}</td>"
+            f"<td>{html.escape(str(item.get('sales_count', 0)))}</td>"
+            f"<td>{html.escape(str(item.get('total_score', 0)))}</td>"
+            f"<td>{html.escape(str(item.get('next_direction', '')))}</td></tr>"
+            for item in rows[:10]
+            if isinstance(item, dict)
+        )
+        strategy_rows = "".join(
+            f"<li>{html.escape(str(item.get('strategy', '전략')))}: {html.escape(str(item.get('action', item.get('reason', ''))))}</li>"
+            for item in strategy[:8]
+            if isinstance(item, dict)
+        )
+        plan_rows = "".join(
+            f"<li>{html.escape(str(item.get('week', '')))} - {html.escape(str(item.get('goal', '')))}: {html.escape(str(item.get('tasks', '')))}</li>"
+            for item in plan[:4]
+            if isinstance(item, dict)
+        )
+        summary_html = f"""
+        <section class="panel">
+          <h2>최근 성과 대시보드</h2>
+          <p>작품 {html.escape(str(metrics.get('project_count', len(rows))))}개 / 총 발신 {html.escape(str(metrics.get('total_sent', 0)))} / 총 이용자 {html.escape(str(metrics.get('total_users', 0)))} / 총 판매금액 {html.escape(str(metrics.get('total_sales_amount', 0)))}</p>
+          <div class="button-row">
+            {excel_report_link(files.get('html_path') or report.get('html_path'), 'HTML 대시보드 열기')}
+            {excel_report_link(files.get('json_path') or report.get('json_path'), 'JSON 대시보드 열기')}
+            {excel_report_link(files.get('zip_path'), '대시보드 ZIP 열기')}
+          </div>
+          <h3>상위 작품 요약</h3>
+          {'<table><thead><tr><th>작품명</th><th>발신</th><th>이용자</th><th>판매</th><th>점수</th><th>다음 방향</th></tr></thead><tbody>' + top_rows + '</tbody></table>' if top_rows else '<p>표시할 작품 데이터가 없습니다.</p>'}
+          <h3>전략 추천</h3>
+          {'<ul>' + strategy_rows + '</ul>' if strategy_rows else '<p>전략 추천 데이터가 없습니다.</p>'}
+          <h3>다음 4주 제작 계획</h3>
+          {'<ul>' + plan_rows + '</ul>' if plan_rows else '<p>제작 계획 데이터가 없습니다.</p>'}
+        </section>
+        """
+    notice = f'<div class="message">{html.escape(message)}</div>' if message else ""
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Performance Dashboard</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; color: #172033; }}
+    main {{ max-width: 1100px; margin: 0 auto; padding: 28px; }}
+    .panel {{ background: #fff; border: 1px solid #d9deea; border-radius: 8px; padding: 20px; margin: 16px 0; }}
+    .button, button {{ display: inline-block; border: 0; border-radius: 6px; background: #2166d1; color: white; padding: 10px 14px; margin: 4px 6px 4px 0; text-decoration: none; cursor: pointer; }}
+    .secondary {{ background: #546179; }}
+    .button-row {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
+    .message {{ border-left: 4px solid #2166d1; background: #eaf1ff; padding: 12px; margin: 12px 0; }}
+    .hint {{ color: #566276; }}
+    table {{ border-collapse: collapse; width: 100%; font-size: 14px; }}
+    th, td {{ border: 1px solid #d9deea; padding: 8px; text-align: left; vertical-align: top; }}
+    th {{ background: #eef3fb; }}
+    @media (max-width: 760px) {{ main {{ padding: 16px; }} table {{ font-size: 12px; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <p><a class="button secondary" href="/">제작 화면</a><a class="button secondary" href="/excel-analysis">엑셀 분석</a><a class="button secondary" href="/status">실행 상태</a></p>
+    <h1>성과 대시보드</h1>
+    <p class="hint">최근 엑셀 분석 리포트를 바탕으로 작품별 성과, 확장 후보, 다음 제작 방향을 로컬에서 계산합니다. 외부 API 호출이나 비용 발생 호출은 없습니다.</p>
+    {notice}
+    <section class="panel">
+      <h2>대시보드 생성</h2>
+      <form method="post" action="/performance-dashboard/run">
+        <p class="hint">최신 카카오 엑셀 분석 결과와 누적 학습 JSONL을 읽어 대시보드를 만듭니다.</p>
+        <button type="submit">최신 엑셀 분석으로 대시보드 생성</button>
+      </form>
+    </section>
+    {summary_html}
+  </main>
+</body>
+</html>"""
+
+
+def run_performance_dashboard() -> dict[str, object]:
+    excel_report = latest_excel_analysis_report()
+    if not excel_report:
+        raise ValueError("먼저 엑셀 분석을 실행해 주세요.")
+    files = excel_report.get("files", {}) if isinstance(excel_report.get("files", {}), dict) else {}
+    learning_jsonl = files.get("learning_jsonl_path")
+    engine = PerformanceDashboardEngine()
+    learning_records = engine.load_learning_jsonl(Path(str(learning_jsonl)), limit=200) if learning_jsonl else []
+    project_name = safe_slug(str(excel_report.get("project_name", "kakao_performance_dashboard")), "kakao_performance_dashboard")
+    report = engine.build_report(
+        OUTPUT_ROOT / "performance_dashboard",
+        project_name=project_name,
+        kakao_excel_report=excel_report,
+        learning_records=learning_records,
     )
     return report.to_dict()
 
@@ -8875,7 +8996,7 @@ def page(
           복잡한 v92를 그대로 끌고 가지 않고, 제출물 생성에 필요한 최소 흐름부터 다시 세웁니다.
           지금 버전은 일반/미니, 정지형/움직이는 유형별 개수와 용량을 분리해 제출 ZIP을 점검합니다.
         </p>
-        <p><a class="memory-link" href="/results">최근 결과물</a> <a class="memory-link" href="/excel-analysis">엑셀 분석</a> <a class="memory-link" href="/memory">진화 메모리 보기</a> <a class="memory-link" href="/status">실행 상태 보기</a> <a class="memory-link" href="/api-settings">API 키 안내</a> <a class="memory-link" href="/release-check">배포 점검</a></p>
+        <p><a class="memory-link" href="/results">최근 결과물</a> <a class="memory-link" href="/excel-analysis">엑셀 분석</a> <a class="memory-link" href="/performance-dashboard">성과 대시보드</a> <a class="memory-link" href="/memory">진화 메모리 보기</a> <a class="memory-link" href="/status">실행 상태 보기</a> <a class="memory-link" href="/api-settings">API 키 안내</a> <a class="memory-link" href="/release-check">배포 점검</a></p>
         {error_html}
         {research_html}
         {result_html}
@@ -8980,6 +9101,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/excel-analysis":
             self.respond(200, excel_analysis_page())
             return
+        if self.path == "/performance-dashboard":
+            self.respond(200, performance_dashboard_page())
+            return
         if self.path == "/release-check":
             self.respond(200, release_check_page())
             return
@@ -9049,6 +9173,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, excel_analysis_page(f"엑셀 분석 완료: 성과 점수 {score_count}개를 생성했습니다.", report))
             except Exception as exc:
                 self.respond(400, excel_analysis_page(f"엑셀 분석 실패: {exc}"))
+            return
+        if self.path == "/performance-dashboard/run":
+            try:
+                report = run_performance_dashboard()
+                rows = report.get("dashboard_rows", []) if isinstance(report, dict) else []
+                self.respond(200, performance_dashboard_page(f"성과 대시보드 생성 완료: 작품 {len(rows)}개를 정리했습니다.", report))
+            except Exception as exc:
+                self.respond(400, performance_dashboard_page(f"성과 대시보드 생성 실패: {exc}"))
             return
         if self.path == "/bulk-review-action":
             length = int(self.headers.get("Content-Length", "0"))
