@@ -4016,6 +4016,95 @@ def bulk_action_preview_page(
 </html>"""
 
 
+def write_bulk_action_report(
+    action: str,
+    query: str,
+    stage_filter: str,
+    records: list[dict[str, str]],
+) -> dict[str, object]:
+    report_dir = OUTPUT_ROOT / "_bulk_actions"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    label = bulk_action_label(action)
+    status_labels = {"created": "생성", "skipped": "건너뜀", "blocked": "막힘", "missing": "찾을 수 없음"}
+    counts = {key: sum(1 for item in records if item.get("status") == key) for key in status_labels}
+    report = {
+        "created_at": timestamp,
+        "action": action,
+        "action_label": label,
+        "query": query,
+        "stage_filter": stage_filter,
+        "counts": counts,
+        "records": records,
+        "safe_scope": "일괄 작업 기록은 작업 이력 확인용입니다. 실제 제출 전에는 최종 파일과 권리 증빙을 사람이 다시 확인해야 합니다.",
+    }
+    json_path = report_dir / f"{timestamp}_{action}_bulk_action_report.json"
+    html_path = report_dir / f"{timestamp}_{action}_bulk_action_report.html"
+    report["json"] = str(json_path)
+    report["html"] = str(html_path)
+    rows = ""
+    for item in records:
+        status = item.get("status", "")
+        rows += f"""
+        <tr>
+          <td><span class="badge {html.escape(status)}">{html.escape(status_labels.get(status, status))}</span></td>
+          <td>{html.escape(item.get("name", ""))}</td>
+          <td>{html.escape(item.get("reason", ""))}</td>
+          <td>{html.escape(item.get("output", ""))}</td>
+        </tr>
+        """
+    if not rows:
+        rows = "<tr><td colspan='4'>기록된 항목이 없습니다.</td></tr>"
+    summary = "".join(
+        f"<div class='metric'><span>{html.escape(text)}</span><strong>{counts.get(key, 0)}</strong></div>"
+        for key, text in status_labels.items()
+    )
+    html_report = f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk Action Report</title>
+  <style>
+    body {{ margin:0; color:#2d2424; font-family:"Malgun Gothic", sans-serif; background:#fffaf0; }}
+    main {{ width:min(980px, calc(100% - 32px)); margin:0 auto; padding:34px 0; }}
+    section {{ margin-bottom:16px; padding:22px; background:#fff; border:2px solid #ead8bc; border-radius:22px; }}
+    h1 {{ margin:0 0 8px; font-size:34px; }}
+    p, td, th {{ color:#6f625f; line-height:1.6; }}
+    .summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }}
+    .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
+    .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
+    table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
+    th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    th {{ color:#2d2424; background:#fff3d8; }}
+    .badge {{ display:inline-block; border-radius:999px; padding:5px 9px; font-weight:900; border:1px solid #d8ccbc; background:#f7f4ef; color:#5d534e; }}
+    .badge.created {{ background:#dff8eb; border-color:#83d7b6; color:#245d46; }}
+    .badge.blocked, .badge.missing {{ background:#fff0ea; border-color:#f0b29b; color:#8a412d; }}
+    code {{ background:#fff3d8; padding:2px 6px; border-radius:8px; }}
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>일괄 작업 결과 리포트</h1>
+    <p><strong>{html.escape(label)}</strong> / 생성 시각 <code>{html.escape(timestamp)}</code></p>
+    <p>필터 <code>{html.escape(stage_filter)}</code> / 검색어 <code>{html.escape(query)}</code></p>
+    <div class="summary">{summary}</div>
+  </section>
+  <section>
+    <table>
+      <thead><tr><th>상태</th><th>결과 폴더</th><th>사유</th><th>생성 파일</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>"""
+    write_json_file(json_path, report)
+    html_path.write_text(html_report, encoding="utf-8")
+    return report
+
+
 def result_detail_page(name: str, message: str = "") -> str:
     output_dir = safe_output_dir_by_name(name)
     if output_dir is None:
@@ -7851,54 +7940,125 @@ class Handler(BaseHTTPRequestHandler):
             skipped = 0
             missing = 0
             blocked = 0
+            records: list[dict[str, str]] = []
             for name in names:
                 output_dir = safe_output_dir_by_name(name)
                 if output_dir is None:
                     missing += 1
+                    records.append({"name": name, "status": "missing", "reason": "결과 폴더를 찾을 수 없음", "output": ""})
                     continue
                 if action == "package":
                     if not (output_dir / "final_candidates" / "final_candidates_report.json").exists():
                         blocked += 1
+                        records.append({"name": output_dir.name, "status": "blocked", "reason": "최종 후보 ZIP이 아직 없음", "output": ""})
                         continue
                     if (output_dir / "pre_submission_package" / "pre_submission_manifest.json").exists():
                         skipped += 1
+                        records.append(
+                            {
+                                "name": output_dir.name,
+                                "status": "skipped",
+                                "reason": "이미 제출 전 패키지가 있음",
+                                "output": str(output_dir / "pre_submission_package" / "pre_submission_review_package.zip"),
+                            }
+                        )
                         continue
                     build_pre_submission_package(output_dir)
                     created += 1
+                    records.append(
+                        {
+                            "name": output_dir.name,
+                            "status": "created",
+                            "reason": "제출 전 패키지 생성 완료",
+                            "output": str(output_dir / "pre_submission_package" / "pre_submission_review_package.zip"),
+                        }
+                    )
                 elif action == "final":
                     if not (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
                         blocked += 1
+                        records.append({"name": output_dir.name, "status": "blocked", "reason": "재생성 결과가 아직 없음", "output": ""})
                         continue
                     if (output_dir / "final_candidates" / "final_candidates_report.json").exists():
                         skipped += 1
+                        records.append(
+                            {
+                                "name": output_dir.name,
+                                "status": "skipped",
+                                "reason": "이미 최종 후보 ZIP이 있음",
+                                "output": str(output_dir / "final_candidates" / "final_candidates_submit.zip"),
+                            }
+                        )
                         continue
                     build_final_candidates(output_dir, default_final_candidate_selections(output_dir))
                     created += 1
+                    records.append(
+                        {
+                            "name": output_dir.name,
+                            "status": "created",
+                            "reason": "최종 후보 ZIP 생성 완료",
+                            "output": str(output_dir / "final_candidates" / "final_candidates_submit.zip"),
+                        }
+                    )
                 elif action == "regen":
                     if not (output_dir / "review_action_plan.json").exists():
                         blocked += 1
+                        records.append({"name": output_dir.name, "status": "blocked", "reason": "수정계획이 아직 없음", "output": ""})
                         continue
                     if (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
                         skipped += 1
+                        records.append(
+                            {
+                                "name": output_dir.name,
+                                "status": "skipped",
+                                "reason": "이미 재생성 결과가 있음",
+                                "output": str(output_dir / "action_regeneration" / "action_regeneration_report.json"),
+                            }
+                        )
                         continue
                     build_action_regeneration(output_dir)
                     created += 1
+                    records.append(
+                        {
+                            "name": output_dir.name,
+                            "status": "created",
+                            "reason": "재생성 실행 완료",
+                            "output": str(output_dir / "action_regeneration" / "action_regeneration_report.json"),
+                        }
+                    )
                 else:
                     if (output_dir / "review_action_plan.json").exists():
                         skipped += 1
+                        records.append(
+                            {
+                                "name": output_dir.name,
+                                "status": "skipped",
+                                "reason": "이미 수정계획이 있음",
+                                "output": str(output_dir / "review_action_plan.json"),
+                            }
+                        )
                         continue
                     build_review_action_plan(output_dir, [], "weak", "목록에서 일괄 생성한 수정 계획")
                     created += 1
+                    records.append(
+                        {
+                            "name": output_dir.name,
+                            "status": "created",
+                            "reason": "수정계획 생성 완료",
+                            "output": str(output_dir / "review_action_plan.json"),
+                        }
+                    )
+            report_info = write_bulk_action_report(action, query, stage_filter, records) if names else {}
+            report_note = f" / 리포트 {report_info.get('html', '')}" if report_info else ""
             if not names:
                 message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
             elif action == "package":
-                message = f"일괄 제출 전 패키지 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 최종후보 없음 {blocked}개 / 찾을 수 없음 {missing}개"
+                message = f"일괄 제출 전 패키지 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 최종후보 없음 {blocked}개 / 찾을 수 없음 {missing}개{report_note}"
             elif action == "final":
-                message = f"일괄 최종 후보 ZIP 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 재생성 없음 {blocked}개 / 찾을 수 없음 {missing}개"
+                message = f"일괄 최종 후보 ZIP 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 재생성 없음 {blocked}개 / 찾을 수 없음 {missing}개{report_note}"
             elif action == "regen":
-                message = f"일괄 재생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 수정계획 없음 {blocked}개 / 찾을 수 없음 {missing}개"
+                message = f"일괄 재생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 수정계획 없음 {blocked}개 / 찾을 수 없음 {missing}개{report_note}"
             else:
-                message = f"일괄 수정계획 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 찾을 수 없음 {missing}개"
+                message = f"일괄 수정계획 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 찾을 수 없음 {missing}개{report_note}"
             self.respond(
                 200,
                 results_page(query, stage_filter, message),
