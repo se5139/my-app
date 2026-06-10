@@ -4637,6 +4637,9 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
     button.filter-button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
     .bulk-bar {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; padding:12px; border:1px solid #ead8bc; border-radius:18px; background:#fffaf0; }}
     .bulk-bar button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
+    .select-all-cell {{ min-width:84px; text-align:center; }}
+    .select-all-cell label {{ display:grid; justify-items:center; gap:6px; font-size:12px; font-weight:900; color:#2d2424; cursor:pointer; }}
+    .select-all-cell input, td input[type="checkbox"] {{ width:18px; height:18px; accent-color:#54bea0; cursor:pointer; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
@@ -4683,13 +4686,41 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
       </div>
       <table>
         <thead>
-          <tr><th>선택</th><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>다음 작업</th><th>바로가기</th></tr>
+          <tr>
+            <th class="select-all-cell">
+              <label for="select_all_results">
+                <span>전체 선택</span>
+                <input id="select_all_results" type="checkbox" aria-label="전체 결과 선택">
+              </label>
+            </th>
+            <th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>다음 작업</th><th>바로가기</th>
+          </tr>
         </thead>
         <tbody>{row_html}</tbody>
       </table>
     </form>
   </section>
 </main>
+<script>
+  const selectAll = document.getElementById('select_all_results');
+  const itemChecks = Array.from(document.querySelectorAll('input[name="names"]'));
+  function syncSelectAll() {{
+    if (!selectAll) return;
+    const checkedCount = itemChecks.filter((item) => item.checked).length;
+    selectAll.checked = itemChecks.length > 0 && checkedCount === itemChecks.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < itemChecks.length;
+  }}
+  if (selectAll) {{
+    selectAll.addEventListener('change', () => {{
+      itemChecks.forEach((item) => {{
+        item.checked = selectAll.checked;
+      }});
+      syncSelectAll();
+    }});
+    itemChecks.forEach((item) => item.addEventListener('change', syncSelectAll));
+    syncSelectAll();
+  }}
+</script>
 </body>
 </html>"""
 
