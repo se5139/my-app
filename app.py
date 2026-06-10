@@ -39,6 +39,7 @@ ANIMATED_COUNT = 24
 OUTPUT_ROOT = Path("outputs")
 RELEASE_ROOT = Path("release")
 MEMORY_ROOT = Path("memory")
+LOCAL_ENV_PATH = Path(".env.local")
 EVOLUTION_MEMORY_PATH = MEMORY_ROOT / "evolution_memory.json"
 API_USAGE_LEDGER_PATH = MEMORY_ROOT / "api_usage_ledger.json"
 STATIC_SUBMISSION_MAX_BYTES = 150 * 1024
@@ -261,6 +262,22 @@ API_KEY_ENV_VARS = {
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
 }
+
+OPTIONAL_LOCAL_SECRET_ENV_VARS = {
+    "Naver Client ID": "NAVER_CLIENT_ID",
+    "Naver Client Secret": "NAVER_CLIENT_SECRET",
+    "Kakao REST API": "KAKAO_REST_API_KEY",
+}
+
+LOCAL_ENV_MANAGED_KEYS = [
+    "GEMINI_API_KEY",
+    "YOUTUBE_API_KEY",
+    "NAVER_CLIENT_ID",
+    "NAVER_CLIENT_SECRET",
+    "KAKAO_REST_API_KEY",
+    "GEMINI_API_DAILY_CALL_LIMIT",
+    "YOUTUBE_API_DAILY_CALL_LIMIT",
+]
 
 API_31D_LIMIT_ENV_VARS = {
     "youtube": "YOUTUBE_API_31D_CALL_LIMIT",
@@ -1331,6 +1348,54 @@ def mask_secret(value: str) -> str:
     if len(value) <= 8:
         return "*" * len(value)
     return f"{value[:4]}...{value[-4:]}"
+
+
+def parse_local_env_file(path: Path = LOCAL_ENV_PATH) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return values
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            values[key] = value
+    return values
+
+
+def load_local_env_file() -> None:
+    for key, value in parse_local_env_file().items():
+        if key and value and not os.environ.get(key):
+            os.environ[key] = value
+
+
+def write_local_env_values(values: dict[str, str]) -> None:
+    current = parse_local_env_file()
+    for key, value in values.items():
+        if key not in LOCAL_ENV_MANAGED_KEYS:
+            continue
+        value = value.strip()
+        if value:
+            current[key] = value
+            os.environ[key] = value
+    retained = {key: value for key, value in current.items() if value}
+    lines = [
+        "# Local-only API keys for Kakao Emoticon Maker.",
+        "# This file is ignored by Git. Do not share it.",
+    ]
+    for key in sorted(retained):
+        lines.append(f"{key}={retained[key]}")
+    LOCAL_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+load_local_env_file()
 
 
 def kst_now() -> datetime:
@@ -2411,6 +2476,11 @@ def api_settings_page(message: str = "") -> str:
         f"<td>{html.escape(info['next_reset_at_kst'])}</td><td>{html.escape(info['masked'])}</td></tr>"
         for provider, info in key_status.items()
     )
+    local_secret_rows = "".join(
+        f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(env_name)}</code></td>"
+        f"<td>{'yes' if os.environ.get(env_name, '') else 'no'}</td><td>{html.escape(mask_secret(os.environ.get(env_name, '')))}</td></tr>"
+        for label, env_name in OPTIONAL_LOCAL_SECRET_ENV_VARS.items()
+    )
     cse_id = os.environ.get("GOOGLE_CSE_ID", "")
     message_html = f'<section class="notice">{html.escape(message)}</section>' if message else ""
     return f"""<!doctype html>
@@ -2431,6 +2501,9 @@ def api_settings_page(message: str = "") -> str:
     th {{ color: #2d2424; background: #fff3d8; }}
     a.button, button {{ display: inline-block; border: 0; border-radius: 999px; padding: 12px 16px; background: #7fd8be; color: #2d2424; font-weight: 900; text-decoration: none; margin-right: 8px; cursor: pointer; }}
     .notice {{ margin-bottom: 18px; padding: 14px 16px; border-radius: 18px; background: #e9fff4; border: 1px solid #9be2c7; }}
+    label {{ display:block; margin:14px 0 6px; font-weight:900; color:#2d2424; }}
+    input {{ width:100%; box-sizing:border-box; border:1px solid #d8ccbc; border-radius:14px; padding:12px; font:inherit; background:#fffdf8; }}
+    .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }}
   </style>
 </head>
 <body>
@@ -2451,12 +2524,58 @@ def api_settings_page(message: str = "") -> str:
       </table>
     </section>
     <section class="panel">
+      <h2>로컬 키 입력</h2>
+      <p>키는 <code>.env.local</code>에만 저장되며 Git에 올라가지 않습니다. 빈 칸은 기존 값을 유지합니다.</p>
+      <form method="post" action="/api-keys/save">
+        <div class="grid">
+          <div>
+            <label for="gemini_api_key">Gemini 생성용 키</label>
+            <input id="gemini_api_key" name="GEMINI_API_KEY" type="password" autocomplete="off" placeholder="{html.escape(mask_secret(os.environ.get('GEMINI_API_KEY', '')))}">
+          </div>
+          <div>
+            <label for="youtube_api_key">YouTube 수집용 키</label>
+            <input id="youtube_api_key" name="YOUTUBE_API_KEY" type="password" autocomplete="off" placeholder="{html.escape(mask_secret(os.environ.get('YOUTUBE_API_KEY', '')))}">
+          </div>
+          <div>
+            <label for="naver_client_id">Naver Client ID</label>
+            <input id="naver_client_id" name="NAVER_CLIENT_ID" type="password" autocomplete="off" placeholder="{html.escape(mask_secret(os.environ.get('NAVER_CLIENT_ID', '')))}">
+          </div>
+          <div>
+            <label for="naver_client_secret">Naver Client Secret</label>
+            <input id="naver_client_secret" name="NAVER_CLIENT_SECRET" type="password" autocomplete="off" placeholder="{html.escape(mask_secret(os.environ.get('NAVER_CLIENT_SECRET', '')))}">
+          </div>
+          <div>
+            <label for="kakao_rest_api_key">Kakao REST API 키</label>
+            <input id="kakao_rest_api_key" name="KAKAO_REST_API_KEY" type="password" autocomplete="off" placeholder="{html.escape(mask_secret(os.environ.get('KAKAO_REST_API_KEY', '')))}">
+          </div>
+          <div>
+            <label for="gemini_limit">Gemini 하루 호출 한도</label>
+            <input id="gemini_limit" name="GEMINI_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('GEMINI_API_DAILY_CALL_LIMIT', '10'))}">
+          </div>
+          <div>
+            <label for="youtube_limit">YouTube 하루 호출 한도</label>
+            <input id="youtube_limit" name="YOUTUBE_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('YOUTUBE_API_DAILY_CALL_LIMIT', '20'))}">
+          </div>
+        </div>
+        <button type="submit">이 PC에 키 저장</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>추가 키 상태</h2>
+      <table>
+        <thead><tr><th>용도</th><th>환경변수</th><th>키 있음</th><th>표시</th></tr></thead>
+        <tbody>{local_secret_rows}</tbody>
+      </table>
+    </section>
+    <section class="panel">
       <h2>키 사용 방식</h2>
       <p>v100은 API 키를 코드나 리포트에 저장하지 않습니다. Windows 환경변수에 넣으면 앱 실행 시 읽습니다.</p>
       <ul>
         <li><code>YOUTUBE_API_KEY</code>: 유튜브 영상 제목/설명 수집 고도화</li>
         <li><code>SEARCH_API_KEY</code>: 향후 검색 API 연동용 자리</li>
-        <li><code>GEMINI_API_KEY</code>: 향후 구글 Gemini 분석 고도화용 자리</li>
+        <li><code>GEMINI_API_KEY</code>: Gemini 기반 자료 분석/생성 고도화용 키</li>
+        <li><code>NAVER_CLIENT_ID</code>, <code>NAVER_CLIENT_SECRET</code>: Naver 검색/수집 연동 준비용 키</li>
+        <li><code>KAKAO_REST_API_KEY</code>: Kakao REST API 연동 준비용 키</li>
         <li><code>OPENAI_API_KEY</code>: 향후 문구/분석 고도화용 자리</li>
       </ul>
       <p>비용 방지를 위해 키가 있어도 한도 환경변수가 0이면 API 호출을 막습니다.</p>
@@ -8236,6 +8355,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/package-release":
             report = build_release_package()
             self.respond(200, release_result_page(report))
+            return
+        if self.path == "/api-keys/save":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            values = {
+                key: form_value(form, key, "")
+                for key in LOCAL_ENV_MANAGED_KEYS
+            }
+            write_local_env_values(values)
+            self.respond(200, api_settings_page(f"로컬 키 설정을 저장했습니다. 저장 위치: {LOCAL_ENV_PATH}"))
             return
         if self.path == "/memory/compact":
             compact_evolution_memory()
