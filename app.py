@@ -3841,8 +3841,9 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
       <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
       <div class="bulk-bar">
         <strong>일괄 작업</strong>
-        <button type="submit">선택 항목 수정계획 생성</button>
-        <small>이미 수정계획이 있는 결과는 건너뜁니다.</small>
+        <button type="submit" name="bulk_action" value="review">선택 항목 수정계획 생성</button>
+        <button type="submit" name="bulk_action" value="regen">선택 항목 재생성 실행</button>
+        <small>수정계획/재생성이 이미 있는 결과는 건너뜁니다.</small>
       </div>
       <table>
         <thead>
@@ -7681,21 +7682,35 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length)
             form = parse_qs(body.decode("utf-8", errors="replace"))
+            action = form_value(form, "bulk_action", "review")
             created = 0
             skipped = 0
             missing = 0
+            blocked = 0
             for name in form.get("names", []):
                 output_dir = safe_output_dir_by_name(name)
                 if output_dir is None:
                     missing += 1
                     continue
-                if (output_dir / "review_action_plan.json").exists():
-                    skipped += 1
-                    continue
-                build_review_action_plan(output_dir, [], "weak", "목록에서 일괄 생성한 수정 계획")
-                created += 1
+                if action == "regen":
+                    if not (output_dir / "review_action_plan.json").exists():
+                        blocked += 1
+                        continue
+                    if (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
+                        skipped += 1
+                        continue
+                    build_action_regeneration(output_dir)
+                    created += 1
+                else:
+                    if (output_dir / "review_action_plan.json").exists():
+                        skipped += 1
+                        continue
+                    build_review_action_plan(output_dir, [], "weak", "목록에서 일괄 생성한 수정 계획")
+                    created += 1
             if not form.get("names", []):
                 message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
+            elif action == "regen":
+                message = f"일괄 재생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 수정계획 없음 {blocked}개 / 찾을 수 없음 {missing}개"
             else:
                 message = f"일괄 수정계획 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 찾을 수 없음 {missing}개"
             self.respond(
