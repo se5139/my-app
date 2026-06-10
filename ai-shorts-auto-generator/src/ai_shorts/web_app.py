@@ -33,6 +33,7 @@ from .workflow import (
     package_final_media,
     prepare_thumbnail,
     prepare_audio_assets,
+    review_metadata_quality,
     update_final_upload_checklist,
     update_render_export_review,
     update_draft_script,
@@ -45,6 +46,10 @@ PORT = 8731
 
 def _escape(value: object) -> str:
     return html.escape(str(value or ""), quote=True)
+
+
+def _read_text_file(path: Path) -> str:
+    return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
 
 def _duration_options(selected: object) -> str:
@@ -420,6 +425,7 @@ def _render_project_detail(project_id: str) -> str:
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
     thumbnail_manifest = read_json(package_dir / "thumbnail" / "thumbnail_manifest.json", {})
+    metadata_quality = read_json(package_dir / "metadata_quality_report.json", {})
     subtitle_burn_status = read_json(PROJECTS_DIR / project_id / "renders" / "final" / "subtitle_burn_status.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
@@ -530,6 +536,19 @@ def _render_project_detail(project_id: str) -> str:
     thumbnail_issues = thumbnail_validation.get("issues", []) if isinstance(thumbnail_validation, dict) else []
     thumbnail_issue_text = ", ".join(str(item) for item in thumbnail_issues) if thumbnail_issues else "없음"
     thumbnail_next_step = thumbnail_manifest.get("next_step", "썸네일 문구를 확인하고 승인하세요.") if isinstance(thumbnail_manifest, dict) else "썸네일 문구를 확인하고 승인하세요."
+    metadata_status = metadata_quality.get("status", "not_created") if isinstance(metadata_quality, dict) else "not_created"
+    metadata_validation = metadata_quality.get("validation", {}) if isinstance(metadata_quality, dict) else {}
+    metadata_issues = metadata_validation.get("issues", []) if isinstance(metadata_validation, dict) else []
+    metadata_issue_text = ", ".join(str(item) for item in metadata_issues) if metadata_issues else "없음"
+    metadata_next_step = metadata_quality.get("next_step", "제목, 설명, 태그, 고정댓글을 점검하세요.") if isinstance(metadata_quality, dict) else "제목, 설명, 태그, 고정댓글을 점검하세요."
+    metadata_title = metadata_quality.get("title", "") if isinstance(metadata_quality, dict) else ""
+    metadata_description = metadata_quality.get("description", "") if isinstance(metadata_quality, dict) else ""
+    metadata_tags = metadata_quality.get("tags", []) if isinstance(metadata_quality, dict) else []
+    metadata_pinned_comment = metadata_quality.get("pinned_comment", "") if isinstance(metadata_quality, dict) else ""
+    metadata_title_value = metadata_title or _read_text_file(package_dir / "title.txt") or str(script.get("title") or "")
+    metadata_description_value = metadata_description or _read_text_file(package_dir / "description.txt") or str(script.get("description") or "")
+    metadata_tags_value = "\n".join(metadata_tags) if metadata_tags else (_read_text_file(package_dir / "tags.txt") or "\n".join(str(tag) for tag in script.get("tags", [])))
+    metadata_pinned_comment_value = metadata_pinned_comment or _read_text_file(package_dir / "pinned_comment.txt") or str(script.get("pinned_comment") or "")
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -975,6 +994,39 @@ def _render_project_detail(project_id: str) -> str:
       <div class="grid two">
         <div><label>SRT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p></div>
         <div><label>VTT</label><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>메타데이터 품질 점검</h2>
+      <p class="muted">제목, 설명, 태그, 고정댓글이 영상 내용과 맞고 과장/반복/저품질 위험이 없는지 로컬에서 점검합니다.</p>
+      <form method="post" action="/metadata-quality">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <label for="metadata_title">제목</label>
+        <input id="metadata_title" name="title" value="{_escape(metadata_title_value)}">
+        <label for="metadata_description">설명</label>
+        <textarea id="metadata_description" name="description">{_escape(metadata_description_value)}</textarea>
+        <label for="metadata_tags">태그</label>
+        <textarea id="metadata_tags" name="tags">{_escape(metadata_tags_value)}</textarea>
+        <label for="metadata_pinned_comment">고정댓글</label>
+        <textarea id="metadata_pinned_comment" name="pinned_comment">{_escape(metadata_pinned_comment_value)}</textarea>
+        <label for="metadata_reviewer_note">검토 메모</label>
+        <input id="metadata_reviewer_note" name="reviewer_note" placeholder="예: 제목/설명/태그가 실제 영상과 일치함">
+        <div class="actions">
+          <button type="submit" name="reviewer_decision" value="needs_review">점검만 실행</button>
+          <button class="secondary" type="submit" name="reviewer_decision" value="approved">점검 후 승인</button>
+          <span class="muted">상태: {_escape(metadata_status)} · 검증 이슈: {_escape(metadata_issue_text)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>상태 파일</label>
+          <p><code>{_escape(package_dir / 'metadata_quality_report.json')}</code></p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(metadata_next_step)}</p>
+        </div>
       </div>
     </section>
 
@@ -1630,6 +1682,22 @@ class Handler(BaseHTTPRequestHandler):
                         "title": params.get("title", [""])[0],
                         "thumbnail_text": params.get("thumbnail_text", [""])[0],
                         "source_note": params.get("source_note", [""])[0],
+                        "reviewer_note": params.get("reviewer_note", [""])[0],
+                        "reviewer_decision": params.get("reviewer_decision", ["needs_review"])[0],
+                    },
+                )
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/metadata-quality":
+                project_id = params.get("project_id", [""])[0]
+                review_metadata_quality(
+                    project_id,
+                    {
+                        "title": params.get("title", [""])[0],
+                        "description": params.get("description", [""])[0],
+                        "tags": params.get("tags", [""])[0],
+                        "pinned_comment": params.get("pinned_comment", [""])[0],
                         "reviewer_note": params.get("reviewer_note", [""])[0],
                         "reviewer_decision": params.get("reviewer_decision", ["needs_review"])[0],
                     },

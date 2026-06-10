@@ -27,6 +27,7 @@ from ai_shorts.subtitle_burner import burn_subtitles_into_final_video
 from ai_shorts.subtitle_export import create_subtitle_files
 from ai_shorts.thumbnail_gate import build_thumbnail_gate
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
+from ai_shorts.metadata_quality import build_metadata_quality_gate
 from ai_shorts.operations_snapshot import create_operations_snapshot
 from ai_shorts.production_readiness import build_production_readiness
 from ai_shorts.project_dashboard import summarize_project_gate
@@ -342,6 +343,23 @@ def test_thumbnail_gate_requires_human_approval(tmp_path) -> None:
     assert (tmp_path / "exports" / "manual_upload_package" / "thumbnail" / "thumbnail_review.svg").exists()
 
 
+def test_metadata_quality_gate_requires_human_approval(tmp_path) -> None:
+    package_dir = tmp_path / "exports" / "manual_upload_package"
+    package_dir.mkdir(parents=True)
+    (package_dir / "title.txt").write_text("테스트 제목", encoding="utf-8")
+    (package_dir / "description.txt").write_text("실제 영상 내용과 일치하는 설명입니다.", encoding="utf-8")
+    (package_dir / "tags.txt").write_text("쇼츠\n생활팁\n자기관리", encoding="utf-8")
+    (package_dir / "pinned_comment.txt").write_text("가장 먼저 바꿀 습관은 무엇인가요?", encoding="utf-8")
+
+    draft_report = build_metadata_quality_gate(tmp_path, {"reviewer_decision": "needs_review"})
+    ready_report = build_metadata_quality_gate(tmp_path, {"reviewer_decision": "approved", "reviewer_note": "확인 완료"})
+
+    assert draft_report["status"] == "metadata_needs_review"
+    assert "human_metadata_review_required" in draft_report["validation"]["issues"]
+    assert ready_report["status"] == "metadata_ready"
+    assert (package_dir / "metadata_quality_report.json").exists()
+
+
 def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     package_dir = tmp_path / "exports" / "manual_upload_package"
     preview_dir = tmp_path / "renders" / "preview"
@@ -419,6 +437,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert "audio_mix_ready" in checklist["missing"]
     assert "final_media_ready" in checklist["missing"]
     assert "thumbnail_ready" in checklist["missing"]
+    assert "metadata_ready" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()
 

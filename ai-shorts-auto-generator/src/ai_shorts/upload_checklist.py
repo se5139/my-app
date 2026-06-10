@@ -16,6 +16,7 @@ def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> 
     render_export = read_json(package_dir / "render_export_status.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
     thumbnail_manifest = read_json(package_dir / "thumbnail" / "thumbnail_manifest.json", {})
+    metadata_quality = read_json(package_dir / "metadata_quality_report.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     project = read_json(project_dir / "project.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
@@ -31,6 +32,7 @@ def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> 
         "audio_mix_ready": audio_mix_status.get("status") == "final_video_ready" and (final_dir / "final_preview.mp4").exists(),
         "final_media_ready": final_media_package.get("status") == "final_media_ready",
         "thumbnail_ready": thumbnail_manifest.get("status") == "thumbnail_ready" and (package_dir / "thumbnail.png").exists(),
+        "metadata_ready": metadata_quality.get("status") == "metadata_ready",
         "render_export_ready": render_export.get("status") == "ready_for_manual_upload",
         "mp4_present": (preview_dir / "preview.mp4").exists(),
         "title_present": _has_text(package_dir / "title.txt"),
@@ -72,6 +74,8 @@ def _next_step(missing: list[str]) -> str:
         return "Package preview.mp4 with sidecar SRT/VTT subtitles before final manual upload."
     if "thumbnail_ready" in missing:
         return "Create and approve thumbnail.png before final manual upload."
+    if "metadata_ready" in missing:
+        return "Review and approve title, description, tags, and pinned comment before final manual upload."
     if "compliance_passed" in missing:
         return "Resolve compliance findings before final upload."
     if "human_project_review" in missing:

@@ -5,9 +5,10 @@ from typing import Any
 
 from .audio_assets import build_audio_asset_manifest
 from .audio_mixer import mix_audio_into_video
-from .package_exporter import export_manual_upload_package
 from .final_media_package import build_final_media_package
 from .ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
+from .metadata_quality import build_metadata_quality_gate
+from .package_exporter import export_manual_upload_package
 from .paths import PROJECTS_DIR, ensure_data_dirs
 from .render_export import build_render_export_status
 from .render_placeholder import create_render_placeholders
@@ -159,6 +160,14 @@ def prepare_thumbnail(project_id: str, inputs: dict[str, Any] | None = None) -> 
     if not read_json(project_dir / "project.json", {}):
         raise FileNotFoundError(f"Project not found: {project_id}")
     return build_thumbnail_gate(project_dir, inputs)
+
+
+def review_metadata_quality(project_id: str, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    return build_metadata_quality_gate(project_dir, inputs)
 
 
 def package_final_media(project_id: str) -> dict[str, Any]:
