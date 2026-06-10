@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from .environment_check import collect_environment_check
+from .paths import DATA_DIR
+from .state import now_iso, write_json
+
+
+SETUP_GUIDES_DIR = DATA_DIR / "setup_guides"
 
 
 def build_first_run_checklist(report: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -46,6 +51,62 @@ def build_first_run_checklist(report: dict[str, Any] | None = None) -> dict[str,
         "overall_status": _overall_action_status(actions),
         "actions": actions,
     }
+
+
+def export_setup_guides(report: dict[str, Any] | None = None) -> dict[str, Any]:
+    checklist = build_first_run_checklist(report)
+    SETUP_GUIDES_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = now_iso().replace(":", "").replace("+", "Z")
+    exported = []
+    for action in checklist["actions"]:
+        path = SETUP_GUIDES_DIR / f"{action['id']}_{stamp}.md"
+        path.write_text(_action_markdown(action), encoding="utf-8")
+        exported.append(
+            {
+                "id": action["id"],
+                "title": action["title"],
+                "status": action["status"],
+                "priority": action["priority"],
+                "path": str(path),
+            }
+        )
+    manifest = {
+        "created_at": now_iso(),
+        "overall_status": checklist["overall_status"],
+        "guide_count": len(exported),
+        "guides": exported,
+    }
+    manifest_path = SETUP_GUIDES_DIR / f"setup_guides_manifest_{stamp}.json"
+    write_json(manifest_path, manifest)
+    manifest["manifest_path"] = str(manifest_path)
+    write_json(manifest_path, manifest)
+    return manifest
+
+
+def _action_markdown(action: dict[str, str]) -> str:
+    return "\n".join(
+        [
+            f"# {action.get('title', 'Setup Action')}",
+            "",
+            f"- Priority: {action.get('priority', '')}",
+            f"- Status: {action.get('status', '')}",
+            "",
+            "## Why This Matters",
+            "",
+            str(action.get("body", "")),
+            "",
+            "## Command Or Action",
+            "",
+            "```powershell",
+            str(action.get("command", "")),
+            "```",
+            "",
+            "## After Completing",
+            "",
+            "Restart the local web app if a system PATH or tool installation changed, then refresh the home page.",
+            "",
+        ]
+    )
 
 
 def _action_status(check: dict[str, Any] | None) -> str:

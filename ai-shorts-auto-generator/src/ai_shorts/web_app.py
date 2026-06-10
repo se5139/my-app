@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .environment_check import collect_environment_check
-from .first_run_setup import build_first_run_checklist
+from .first_run_setup import build_first_run_checklist, export_setup_guides
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -139,6 +139,12 @@ def _first_run_checklist_html() -> str:
       <p>진행 상태 <span class="status">{_escape(checklist.get('overall_status'))}</span></p>
       <p class="muted">환경 점검 결과를 바탕으로 새 PC에서 먼저 처리할 작업 순서를 보여줍니다.</p>
       <table><thead><tr><th>우선순위</th><th>상태</th><th>작업</th><th>명령/조치</th></tr></thead><tbody>{rows}</tbody></table>
+      <form method="post" action="/setup-guides">
+        <div class="actions">
+          <button class="secondary" type="submit">설정 가이드 생성</button>
+          <span class="muted">Markdown 가이드는 data/setup_guides 아래에 저장됩니다.</span>
+        </div>
+      </form>
     </section>
     """
 
@@ -499,6 +505,7 @@ def _render_page(
     plan: dict | None = None,
     growth_import: dict | None = None,
     snapshot: dict | None = None,
+    setup_guides: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -588,6 +595,25 @@ def _render_page(
           <p><code>{_escape(snapshot.get('zip_path'))}</code></p>
           <label>handoff 문서</label>
           <p><code>{_escape(snapshot.get('readme_path'))}</code></p>
+        </section>
+        """
+
+    setup_guides_html = ""
+    if setup_guides:
+        guide_rows = "".join(
+            "<tr>"
+            f"<td>{_escape(item.get('title'))}</td>"
+            f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+            f"<td><code>{_escape(item.get('path'))}</code></td>"
+            "</tr>"
+            for item in setup_guides.get("guides", [])
+        )
+        setup_guides_html = f"""
+        <section class="band">
+          <h2>설정 가이드 생성 결과</h2>
+          <p>가이드 <span class="status">{int(setup_guides.get('guide_count', 0))}</span>개 생성</p>
+          <p class="muted">manifest: <code>{_escape(setup_guides.get('manifest_path'))}</code></p>
+          <table><thead><tr><th>가이드</th><th>상태</th><th>파일</th></tr></thead><tbody>{guide_rows}</tbody></table>
         </section>
         """
 
@@ -797,6 +823,7 @@ def _render_page(
     {plan_html}
     {growth_import_html}
     {snapshot_html}
+    {setup_guides_html}
 
     <section class="band">
       <h2>최근 저장 초안</h2>
@@ -882,6 +909,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/operations-snapshot":
                 snapshot = create_operations_snapshot()
                 self._send(_render_page(snapshot=snapshot))
+                return
+            if self.path == "/setup-guides":
+                setup_guides = export_setup_guides()
+                self._send(_render_page(setup_guides=setup_guides))
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]

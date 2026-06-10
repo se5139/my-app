@@ -438,6 +438,23 @@ Next recommended work:
 
 - Add clickable setup guide exports for missing Git, missing data snapshot, and missing ffmpeg.
 
+## 2026-06-10 Setup Guide Export Step
+
+Added setup guide export:
+
+- `src/ai_shorts/first_run_setup.py` now writes one Markdown guide per first-run action plus a JSON manifest under `data/setup_guides`.
+- The first-run checklist panel now includes a `설정 가이드 생성` action.
+- The web app shows generated guide paths after export.
+
+Verification target:
+
+- Compile first-run setup, web app, and tests.
+- Smoke-test guide export and web HTML rendering.
+
+Next recommended work:
+
+- Add a setup guide index/detail viewer in the web UI so generated Markdown can be opened without leaving the app.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
