@@ -261,6 +261,7 @@ API_KEY_ENV_VARS = {
     "search": "SEARCH_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
+    "naver_search": "NAVER_CLIENT_ID",
 }
 
 OPTIONAL_LOCAL_SECRET_ENV_VARS = {
@@ -277,6 +278,7 @@ LOCAL_ENV_MANAGED_KEYS = [
     "KAKAO_REST_API_KEY",
     "GEMINI_API_DAILY_CALL_LIMIT",
     "YOUTUBE_API_DAILY_CALL_LIMIT",
+    "NAVER_SEARCH_DAILY_CALL_LIMIT",
 ]
 
 API_31D_LIMIT_ENV_VARS = {
@@ -290,6 +292,7 @@ API_DAILY_LIMIT_ENV_VARS = {
     "youtube": "YOUTUBE_API_DAILY_CALL_LIMIT",
     "search": "SEARCH_API_DAILY_CALL_LIMIT",
     "gemini": "GEMINI_API_DAILY_CALL_LIMIT",
+    "naver_search": "NAVER_SEARCH_DAILY_CALL_LIMIT",
 }
 
 API_LEGACY_30D_LIMIT_ENV_VARS = {
@@ -297,13 +300,14 @@ API_LEGACY_30D_LIMIT_ENV_VARS = {
     "search": "SEARCH_API_30D_CALL_LIMIT",
     "gemini": "GEMINI_API_30D_CALL_LIMIT",
     "openai": "OPENAI_API_30D_CALL_LIMIT",
+    "naver_search": "NAVER_SEARCH_30D_CALL_LIMIT",
 }
 
 KST = timezone(timedelta(hours=9))
 PACIFIC_STANDARD = timezone(timedelta(hours=-8))
 PACIFIC_DAYLIGHT = timezone(timedelta(hours=-7))
 API_SAFETY_WINDOW_DAYS = 31
-DAILY_RESET_PROVIDERS = {"youtube", "search", "gemini"}
+DAILY_RESET_PROVIDERS = {"youtube", "search", "gemini", "naver_search"}
 PACIFIC_RESET_PROVIDERS = {"gemini"}
 
 
@@ -1644,19 +1648,64 @@ def fetch_search_results(keyword: str) -> tuple[list[str], str]:
         return [], f"search_api_failed:{type(exc).__name__}"
 
 
+def fetch_naver_search_results(keyword: str) -> tuple[list[str], str]:
+    client_id = os.environ.get("NAVER_CLIENT_ID", "")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        return [], "naver_search_api_unavailable"
+    allowed, reason = reserve_api_usage("naver_search", 1, f"naver_search:{keyword}")
+    if not allowed:
+        return [], f"naver_search_api_blocked:{reason}"
+    headers = {
+        "User-Agent": "KakaoEmoticonV100Research/1.0",
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret,
+    }
+    endpoints = [
+        ("webkr", f"https://openapi.naver.com/v1/search/webkr.json?query={quote(keyword)}&display=5"),
+        ("blog", f"https://openapi.naver.com/v1/search/blog.json?query={quote(keyword)}&display=5"),
+        ("news", f"https://openapi.naver.com/v1/search/news.json?query={quote(keyword)}&display=5"),
+    ]
+    urls: list[str] = []
+    statuses: list[str] = []
+    for kind, api_url in endpoints:
+        try:
+            request = Request(api_url, headers=headers)
+            with urlopen(request, timeout=8) as response:
+                payload = json.loads(response.read(700_000).decode("utf-8", errors="replace"))
+            for item in payload.get("items", []):
+                if not isinstance(item, dict):
+                    continue
+                for key in ["originallink", "link"]:
+                    value = str(item.get(key, "")).strip()
+                    if value.startswith(("http://", "https://")):
+                        urls.append(html.unescape(value))
+            statuses.append(f"{kind}:ok")
+        except Exception as exc:
+            statuses.append(f"{kind}:{type(exc).__name__}")
+    clean_urls = unique_keep_order(urls)
+    status = "naver_search_api_fetched" if clean_urls else f"naver_search_api_failed:{','.join(statuses)}"
+    return clean_urls, status
+
+
 def collect_search_urls(keywords: list[str]) -> tuple[list[str], list[dict[str, object]]]:
     collected_urls: list[str] = []
     reports: list[dict[str, object]] = []
     for keyword in keywords[:8]:
         urls, status = fetch_search_results(keyword)
         collected_urls.extend(urls)
+        naver_urls, naver_status = fetch_naver_search_results(keyword)
+        collected_urls.extend(naver_urls)
         reports.append(
             {
                 "keyword": keyword,
                 "status": status,
-                "url_count": len(urls),
-                "urls": urls,
-                "fallback": not bool(urls),
+                "naver_status": naver_status,
+                "url_count": len(urls) + len(naver_urls),
+                "urls": unique_keep_order([*urls, *naver_urls]),
+                "google_url_count": len(urls),
+                "naver_url_count": len(naver_urls),
+                "fallback": not bool(urls or naver_urls),
             }
         )
     return unique_keep_order(collected_urls)[:30], reports
@@ -2556,6 +2605,10 @@ def api_settings_page(message: str = "") -> str:
             <label for="youtube_limit">YouTube 하루 호출 한도</label>
             <input id="youtube_limit" name="YOUTUBE_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('YOUTUBE_API_DAILY_CALL_LIMIT', '20'))}">
           </div>
+          <div>
+            <label for="naver_limit">Naver 검색 하루 호출 한도</label>
+            <input id="naver_limit" name="NAVER_SEARCH_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('NAVER_SEARCH_DAILY_CALL_LIMIT', '20'))}">
+          </div>
         </div>
         <button type="submit">이 PC에 키 저장</button>
       </form>
@@ -2581,6 +2634,7 @@ def api_settings_page(message: str = "") -> str:
       <p>비용 방지를 위해 키가 있어도 한도 환경변수가 0이면 API 호출을 막습니다.</p>
       <ul>
         <li><code>YOUTUBE_API_DAILY_CALL_LIMIT</code>: 하루 유튜브 API 호출 허용 횟수</li>
+        <li><code>NAVER_SEARCH_DAILY_CALL_LIMIT</code>: 하루 Naver 검색 API 호출 허용 횟수</li>
         <li><code>SEARCH_API_DAILY_CALL_LIMIT</code>: 하루 검색 API 호출 허용 횟수</li>
         <li><code>GOOGLE_CSE_ID</code>: Google Custom Search 검색 엔진 ID, 현재 {'설정됨' if cse_id else '미설정'}</li>
         <li><code>GEMINI_API_DAILY_CALL_LIMIT</code>: 하루 Gemini API 호출 허용 횟수, Pacific 자정 리셋</li>
