@@ -279,6 +279,11 @@ LOCAL_ENV_MANAGED_KEYS = [
     "GEMINI_API_DAILY_CALL_LIMIT",
     "YOUTUBE_API_DAILY_CALL_LIMIT",
     "NAVER_SEARCH_DAILY_CALL_LIMIT",
+    "GEMINI_API_ENABLED",
+    "YOUTUBE_API_ENABLED",
+    "NAVER_SEARCH_API_ENABLED",
+    "SEARCH_API_ENABLED",
+    "OPENAI_API_ENABLED",
 ]
 
 API_31D_LIMIT_ENV_VARS = {
@@ -301,6 +306,14 @@ API_LEGACY_30D_LIMIT_ENV_VARS = {
     "gemini": "GEMINI_API_30D_CALL_LIMIT",
     "openai": "OPENAI_API_30D_CALL_LIMIT",
     "naver_search": "NAVER_SEARCH_30D_CALL_LIMIT",
+}
+
+API_ENABLE_ENV_VARS = {
+    "youtube": "YOUTUBE_API_ENABLED",
+    "search": "SEARCH_API_ENABLED",
+    "gemini": "GEMINI_API_ENABLED",
+    "openai": "OPENAI_API_ENABLED",
+    "naver_search": "NAVER_SEARCH_API_ENABLED",
 }
 
 KST = timezone(timedelta(hours=9))
@@ -1386,9 +1399,12 @@ def write_local_env_values(values: dict[str, str]) -> None:
         if key not in LOCAL_ENV_MANAGED_KEYS:
             continue
         value = value.strip()
-        if value:
+        if value or key.endswith("_LIMIT") or key.endswith("_ENABLED"):
             current[key] = value
-            os.environ[key] = value
+            if value:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
     retained = {key: value for key, value in current.items() if value}
     lines = [
         "# Local-only API keys for Kakao Emoticon Maker.",
@@ -1484,6 +1500,13 @@ def api_call_limit(provider: str) -> int:
         return 0
 
 
+def api_provider_enabled(provider: str) -> bool:
+    env_name = API_ENABLE_ENV_VARS.get(provider, "")
+    if not env_name:
+        return False
+    return os.environ.get(env_name, "").strip() == "1"
+
+
 def api_usage_summary(provider: str) -> dict[str, object]:
     now = kst_now()
     window = api_usage_window(provider)
@@ -1516,7 +1539,9 @@ def api_usage_summary(provider: str) -> dict[str, object]:
         "limit": limit,
         "used": used_units,
         "remaining": remaining,
-        "enabled": bool(os.environ.get(API_KEY_ENV_VARS.get(provider, ""), "")) and limit > 0,
+        "enabled": api_provider_enabled(provider) and bool(os.environ.get(API_KEY_ENV_VARS.get(provider, ""), "")) and limit > 0,
+        "enable_env_var": API_ENABLE_ENV_VARS.get(provider, ""),
+        "explicitly_allowed": api_provider_enabled(provider),
         "events": recent_events[-20:],
     }
 
@@ -1526,6 +1551,9 @@ def reserve_api_usage(provider: str, units: int, purpose: str) -> tuple[bool, st
     summary = api_usage_summary(provider)
     if not os.environ.get(API_KEY_ENV_VARS.get(provider, ""), ""):
         return False, f"{provider} API key is not set."
+    if not api_provider_enabled(provider):
+        enable_env = API_ENABLE_ENV_VARS.get(provider, "")
+        return False, f"{provider} API use is blocked. Set {enable_env}=1 only when you accept possible provider charges."
     if int(summary["limit"]) <= 0:
         limit_env = API_DAILY_LIMIT_ENV_VARS.get(provider, API_31D_LIMIT_ENV_VARS.get(provider, ""))
         return False, f"{provider} {summary['window']} limit is not set. Set {limit_env} to allow usage."
@@ -1566,9 +1594,11 @@ def api_key_status() -> dict[str, dict[str, str]]:
         usage = api_usage_summary(provider)
         status[provider] = {
             "env_var": env_name,
+            "enable_env_var": str(usage.get("enable_env_var", "")),
             "limit_env_var": API_DAILY_LIMIT_ENV_VARS.get(provider, API_31D_LIMIT_ENV_VARS.get(provider, "")),
             "legacy_limit_env_var": API_LEGACY_30D_LIMIT_ENV_VARS.get(provider, ""),
             "available": "yes" if bool(value) else "no",
+            "explicitly_allowed": "yes" if usage.get("explicitly_allowed") else "no",
             "masked": mask_secret(value),
             "limit": str(usage["limit"]),
             "used": str(usage["used"]),
@@ -2518,6 +2548,7 @@ def api_settings_page(message: str = "") -> str:
     key_status = api_key_status()
     rows = "".join(
         f"<tr><td>{html.escape(provider)}</td><td><code>{html.escape(info['env_var'])}</code></td>"
+        f"<td><code>{html.escape(info['enable_env_var'])}</code><br>{html.escape(info['explicitly_allowed'])}</td>"
         f"<td><code>{html.escape(info['limit_env_var'])}</code></td>"
         f"<td>{html.escape(info['available'])}</td><td>{html.escape(info['enabled'])}</td>"
         f"<td>{html.escape(info['window'])}</td>"
@@ -2551,7 +2582,7 @@ def api_settings_page(message: str = "") -> str:
     a.button, button {{ display: inline-block; border: 0; border-radius: 999px; padding: 12px 16px; background: #7fd8be; color: #2d2424; font-weight: 900; text-decoration: none; margin-right: 8px; cursor: pointer; }}
     .notice {{ margin-bottom: 18px; padding: 14px 16px; border-radius: 18px; background: #e9fff4; border: 1px solid #9be2c7; }}
     label {{ display:block; margin:14px 0 6px; font-weight:900; color:#2d2424; }}
-    input {{ width:100%; box-sizing:border-box; border:1px solid #d8ccbc; border-radius:14px; padding:12px; font:inherit; background:#fffdf8; }}
+    input, select {{ width:100%; box-sizing:border-box; border:1px solid #d8ccbc; border-radius:14px; padding:12px; font:inherit; background:#fffdf8; }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }}
   </style>
 </head>
@@ -2568,13 +2599,13 @@ def api_settings_page(message: str = "") -> str:
     <section class="panel">
       <h2>현재 상태</h2>
       <table>
-        <thead><tr><th>Provider</th><th>키 환경변수</th><th>한도 환경변수</th><th>키 있음</th><th>사용 허용</th><th>리셋 정책</th><th>한도</th><th>사용</th><th>남음</th><th>다음 회복(KST)</th><th>표시</th></tr></thead>
+        <thead><tr><th>Provider</th><th>키 환경변수</th><th>비용 차단 스위치</th><th>한도 환경변수</th><th>키 있음</th><th>최종 허용</th><th>리셋 정책</th><th>한도</th><th>사용</th><th>남음</th><th>다음 회복(KST)</th><th>표시</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </section>
     <section class="panel">
       <h2>로컬 키 입력</h2>
-      <p>키는 <code>.env.local</code>에만 저장되며 Git에 올라가지 않습니다. 빈 칸은 기존 값을 유지합니다.</p>
+      <p>키는 <code>.env.local</code>에만 저장되며 Git에 올라가지 않습니다. 비용 발생 가능 API 호출은 기본 차단이며, 허용 스위치와 호출 한도를 둘 다 설정해야 실행됩니다.</p>
       <form method="post" action="/api-keys/save">
         <div class="grid">
           <div>
@@ -2599,15 +2630,36 @@ def api_settings_page(message: str = "") -> str:
           </div>
           <div>
             <label for="gemini_limit">Gemini 하루 호출 한도</label>
-            <input id="gemini_limit" name="GEMINI_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('GEMINI_API_DAILY_CALL_LIMIT', '10'))}">
+            <input id="gemini_limit" name="GEMINI_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('GEMINI_API_DAILY_CALL_LIMIT', '0'))}">
+          </div>
+          <div>
+            <label for="gemini_enabled">Gemini API 비용 발생 가능 호출</label>
+            <select id="gemini_enabled" name="GEMINI_API_ENABLED">
+              <option value="0" {'selected' if os.environ.get('GEMINI_API_ENABLED', '0') != '1' else ''}>차단</option>
+              <option value="1" {'selected' if os.environ.get('GEMINI_API_ENABLED', '0') == '1' else ''}>허용</option>
+            </select>
           </div>
           <div>
             <label for="youtube_limit">YouTube 하루 호출 한도</label>
-            <input id="youtube_limit" name="YOUTUBE_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('YOUTUBE_API_DAILY_CALL_LIMIT', '20'))}">
+            <input id="youtube_limit" name="YOUTUBE_API_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('YOUTUBE_API_DAILY_CALL_LIMIT', '0'))}">
+          </div>
+          <div>
+            <label for="youtube_enabled">YouTube API 비용 발생 가능 호출</label>
+            <select id="youtube_enabled" name="YOUTUBE_API_ENABLED">
+              <option value="0" {'selected' if os.environ.get('YOUTUBE_API_ENABLED', '0') != '1' else ''}>차단</option>
+              <option value="1" {'selected' if os.environ.get('YOUTUBE_API_ENABLED', '0') == '1' else ''}>허용</option>
+            </select>
           </div>
           <div>
             <label for="naver_limit">Naver 검색 하루 호출 한도</label>
-            <input id="naver_limit" name="NAVER_SEARCH_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('NAVER_SEARCH_DAILY_CALL_LIMIT', '20'))}">
+            <input id="naver_limit" name="NAVER_SEARCH_DAILY_CALL_LIMIT" type="number" min="0" value="{html.escape(os.environ.get('NAVER_SEARCH_DAILY_CALL_LIMIT', '0'))}">
+          </div>
+          <div>
+            <label for="naver_enabled">Naver 검색 API 비용 발생 가능 호출</label>
+            <select id="naver_enabled" name="NAVER_SEARCH_API_ENABLED">
+              <option value="0" {'selected' if os.environ.get('NAVER_SEARCH_API_ENABLED', '0') != '1' else ''}>차단</option>
+              <option value="1" {'selected' if os.environ.get('NAVER_SEARCH_API_ENABLED', '0') == '1' else ''}>허용</option>
+            </select>
           </div>
         </div>
         <button type="submit">이 PC에 키 저장</button>
@@ -2631,8 +2683,9 @@ def api_settings_page(message: str = "") -> str:
         <li><code>KAKAO_REST_API_KEY</code>: Kakao REST API 연동 준비용 키</li>
         <li><code>OPENAI_API_KEY</code>: 향후 문구/분석 고도화용 자리</li>
       </ul>
-      <p>비용 방지를 위해 키가 있어도 한도 환경변수가 0이면 API 호출을 막습니다.</p>
+      <p>비용 방지를 위해 키가 있어도 허용 스위치가 차단이거나 한도 환경변수가 0이면 API 호출을 막습니다.</p>
       <ul>
+        <li><code>YOUTUBE_API_ENABLED</code>, <code>GEMINI_API_ENABLED</code>, <code>NAVER_SEARCH_API_ENABLED</code>: <code>1</code>일 때만 호출 허용</li>
         <li><code>YOUTUBE_API_DAILY_CALL_LIMIT</code>: 하루 유튜브 API 호출 허용 횟수</li>
         <li><code>NAVER_SEARCH_DAILY_CALL_LIMIT</code>: 하루 Naver 검색 API 호출 허용 횟수</li>
         <li><code>SEARCH_API_DAILY_CALL_LIMIT</code>: 하루 검색 API 호출 허용 횟수</li>
