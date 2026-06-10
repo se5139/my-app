@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .package_exporter import export_manual_upload_package
+from .final_media_package import build_final_media_package
 from .ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
 from .paths import PROJECTS_DIR, ensure_data_dirs
 from .render_export import build_render_export_status
@@ -116,8 +117,18 @@ def check_or_render_mp4(project_id: str, render: bool = False) -> dict[str, Any]
     if not (project_dir / "renders" / "preview" / "preview_manifest.json").exists():
         generate_preview_render(project_id)
     if render:
+        if not (project_dir / "renders" / "subtitles" / "subtitle_manifest.json").exists():
+            generate_subtitle_export(project_id)
         return render_mp4_from_preview(project_id, project_dir)
     return mp4_status(project_dir)
+
+
+def package_final_media(project_id: str) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    return build_final_media_package(project_dir)
 
 
 def create_ffmpeg_setup_guide(project_id: str) -> dict[str, Any]:

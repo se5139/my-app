@@ -20,12 +20,15 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_status = read_json(preview_dir / "mp4_status.json", {})
     subtitle_manifest = read_json(project_dir / "renders" / "subtitles" / "subtitle_manifest.json", {})
+    final_media_package = read_json(package_dir / "final_media_package.json", {})
+    subtitle_dir = project_dir / "renders" / "subtitles"
 
     timeline_ready = (render_dir / "timeline.html").exists()
     gif_ready = (preview_dir / "preview.gif").exists() and preview_manifest.get("status") == "preview_ready"
     mp4_ready = (preview_dir / "preview.mp4").exists() and mp4_status.get("status") == "mp4_ready"
     timing_plan_ready = (render_dir / "timing_plan.json").exists()
     subtitles_ready = subtitle_manifest.get("status") == "subtitles_ready"
+    final_media_ready = final_media_package.get("status") == "final_media_ready"
 
     blockers: list[str] = []
     if not timeline_ready:
@@ -56,16 +59,21 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
             "gif_ready": gif_ready,
             "mp4_ready": mp4_ready,
             "subtitles_ready": subtitles_ready,
+            "final_media_ready": final_media_ready,
             "timeline_html": str(render_dir / "timeline.html"),
             "preview_gif": str(preview_dir / "preview.gif"),
             "preview_mp4": str(preview_dir / "preview.mp4"),
             "subtitle_manifest": str(project_dir / "renders" / "subtitles" / "subtitle_manifest.json"),
+            "subtitle_srt": str(subtitle_dir / "subtitles.srt"),
+            "subtitle_vtt": str(subtitle_dir / "subtitles.vtt"),
+            "final_media_package": str(package_dir / "final_media_package.json"),
         },
         "source_manifests": {
             "render_manifest": str(render_dir / "render_manifest.json") if render_manifest else "",
             "preview_manifest": str(preview_dir / "preview_manifest.json") if preview_manifest else "",
             "mp4_status": str(preview_dir / "mp4_status.json") if mp4_status else "",
             "subtitle_manifest": str(project_dir / "renders" / "subtitles" / "subtitle_manifest.json") if subtitle_manifest else "",
+            "final_media_package": str(package_dir / "final_media_package.json") if final_media_package else "",
         },
         "blockers": blockers,
         "next_step": _next_step(package_status, mp4_ready),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import zipfile
 
 from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
@@ -17,7 +18,8 @@ from ai_shorts.script_lab import script_draft_from_dict
 from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
-from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
+from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
+from ai_shorts.final_media_package import build_final_media_package
 from ai_shorts.subtitle_export import create_subtitle_files
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
@@ -172,6 +174,33 @@ def test_mp4_status_records_ffmpeg_state(tmp_path) -> None:
     assert (tmp_path / "renders" / "preview" / "mp4_status.json").exists()
 
 
+def test_mp4_render_uses_timing_concat_and_subtitle_sidecars(tmp_path, monkeypatch) -> None:
+    from ai_shorts import ffmpeg_renderer
+
+    draft = create_local_script_draft("MP4 타이밍 테스트", "주제만 참고", target_duration_sec=30)
+    create_render_placeholders("p1", draft, tmp_path)
+    create_preview_media("p1", tmp_path)
+    create_subtitle_files("p1", tmp_path)
+
+    def fake_run(command, capture_output, text, timeout):
+        output_path = tmp_path / "renders" / "preview" / "preview.mp4"
+        output_path.write_bytes(b"mp4")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(ffmpeg_renderer, "find_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(ffmpeg_renderer.subprocess, "run", fake_run)
+
+    status = render_mp4_from_preview("p1", tmp_path)
+    concat_path = tmp_path / "renders" / "preview" / "ffmpeg_concat_frames.txt"
+    concat_text = concat_path.read_text(encoding="utf-8")
+    assert status["status"] == "mp4_ready"
+    assert status["target_duration_sec"] == 30
+    assert status["subtitle_mode"] == "sidecar"
+    assert status["subtitle_sidecars"]["srt"].endswith("subtitles.srt")
+    assert "duration 7.500" in concat_text
+    assert concat_path.exists()
+
+
 def test_ffmpeg_setup_guide_creates_json_and_markdown(tmp_path) -> None:
     guide = ffmpeg_setup_guide(tmp_path)
     assert guide["status"] == "guide_ready"
@@ -203,6 +232,33 @@ def test_render_export_blocks_without_subtitles_when_timing_exists(tmp_path) -> 
     assert "subtitles_required_before_export" in status["blockers"]
 
 
+def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
+    package_dir = tmp_path / "exports" / "manual_upload_package"
+    preview_dir = tmp_path / "renders" / "preview"
+    subtitle_dir = tmp_path / "renders" / "subtitles"
+    preview_dir.mkdir(parents=True)
+    subtitle_dir.mkdir(parents=True)
+    mp4_path = preview_dir / "preview.mp4"
+    srt_path = subtitle_dir / "subtitles.srt"
+    vtt_path = subtitle_dir / "subtitles.vtt"
+    mp4_path.write_bytes(b"mp4")
+    srt_path.write_text("1\n00:00:00,000 --> 00:00:01,000\n테스트\n", encoding="utf-8")
+    vtt_path.write_text("WEBVTT\n\n00:00.000 --> 00:01.000\n테스트\n", encoding="utf-8")
+    write_json(preview_dir / "mp4_status.json", {"status": "mp4_ready", "mp4_path": str(mp4_path)})
+    write_json(
+        subtitle_dir / "subtitle_manifest.json",
+        {"status": "subtitles_ready", "srt_path": str(srt_path), "vtt_path": str(vtt_path)},
+    )
+
+    manifest = build_final_media_package(tmp_path)
+
+    assert manifest["status"] == "final_media_ready"
+    assert (package_dir / "media" / "preview.mp4").exists()
+    assert (package_dir / "media" / "subtitles.srt").exists()
+    assert (package_dir / "media" / "subtitles.vtt").exists()
+    assert manifest["subtitle_mode"] == "sidecar"
+
+
 def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     package_dir = tmp_path / "exports" / "manual_upload_package"
     package_dir.mkdir(parents=True)
@@ -219,6 +275,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert checklist["status"] == "blocked_before_upload"
     assert checklist["manual_upload_allowed"] is False
     assert "mp4_present" in checklist["missing"]
+    assert "final_media_ready" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()
 

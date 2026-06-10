@@ -28,6 +28,7 @@ from .workflow import (
     generate_placeholder_render,
     generate_preview_render,
     generate_subtitle_export,
+    package_final_media,
     update_final_upload_checklist,
     update_render_export_review,
     update_draft_script,
@@ -412,6 +413,7 @@ def _render_project_detail(project_id: str) -> str:
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export_status = read_json(package_dir / "render_export_status.json", {})
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
+    final_media_package = read_json(package_dir / "final_media_package.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     timing_plan = read_json(render_dir / "timing_plan.json", {})
@@ -512,6 +514,9 @@ def _render_project_detail(project_id: str) -> str:
     mp4_path = mp4_info.get("mp4_path", "") if isinstance(mp4_info, dict) else ""
     ffmpeg_path = mp4_info.get("ffmpeg_path", "") if isinstance(mp4_info, dict) else ""
     install_hint = mp4_info.get("install_hint", "") if isinstance(mp4_info, dict) else ""
+    concat_manifest = mp4_info.get("concat_manifest", "") if isinstance(mp4_info, dict) else ""
+    subtitle_sidecars = mp4_info.get("subtitle_sidecars", {}) if isinstance(mp4_info, dict) else {}
+    subtitle_mode = mp4_info.get("subtitle_mode", "sidecar_pending") if isinstance(mp4_info, dict) else "sidecar_pending"
     setup_guide_path = ""
     setup_command = ""
     verify_command = ""
@@ -534,6 +539,15 @@ def _render_project_detail(project_id: str) -> str:
     final_upload_missing_text = ", ".join(str(item) for item in final_upload_missing) if final_upload_missing else "없음"
     final_upload_next_step = final_upload_checklist.get("next_step", "최종 업로드 전 체크리스트를 실행하세요.") if isinstance(final_upload_checklist, dict) else "최종 업로드 전 체크리스트를 실행하세요."
     final_upload_allowed = final_upload_checklist.get("manual_upload_allowed", False) if isinstance(final_upload_checklist, dict) else False
+    final_media_status = final_media_package.get("status", "not_created") if isinstance(final_media_package, dict) else "not_created"
+    final_media_dir = final_media_package.get("media_dir", str(package_dir / "media")) if isinstance(final_media_package, dict) else str(package_dir / "media")
+    final_media_copied = final_media_package.get("copied", {}) if isinstance(final_media_package, dict) else {}
+    final_media_missing = final_media_package.get("missing", []) if isinstance(final_media_package, dict) else []
+    final_media_missing_text = ", ".join(str(item) for item in final_media_missing) if final_media_missing else "없음"
+    final_media_next_step = final_media_package.get("next_step", "MP4와 SRT/VTT 자막을 만든 뒤 수동 업로드 미디어 패키지를 생성하세요.") if isinstance(final_media_package, dict) else "MP4와 SRT/VTT 자막을 만든 뒤 수동 업로드 미디어 패키지를 생성하세요."
+    final_media_mp4 = final_media_copied.get("mp4", "") if isinstance(final_media_copied, dict) else ""
+    final_media_srt = final_media_copied.get("srt", "") if isinstance(final_media_copied, dict) else ""
+    final_media_vtt = final_media_copied.get("vtt", "") if isinstance(final_media_copied, dict) else ""
 
     return f"""
     <section class="band detail-head">
@@ -677,7 +691,7 @@ def _render_project_detail(project_id: str) -> str:
 
     <section class="band">
       <h2>렌더 미리보기</h2>
-      <p class="muted">MP4 전 단계로 PNG 프레임과 애니메이션 GIF를 생성합니다. 현재 환경에는 ffmpeg가 없어 MP4 변환은 다음 단계입니다.</p>
+      <p class="muted">MP4 전 단계로 PNG 프레임과 애니메이션 GIF를 생성합니다. MP4 변환은 ffmpeg 상태 확인 후 진행합니다.</p>
       <form method="post" action="/render-preview">
         <input type="hidden" name="project_id" value="{_escape(project_id)}">
         <div class="actions">
@@ -711,6 +725,16 @@ def _render_project_detail(project_id: str) -> str:
           <p><code>{_escape(ffmpeg_path or install_hint or '아직 확인하지 않았습니다.')}</code></p>
         </div>
       </div>
+      <div class="grid two">
+        <div>
+          <label>타이밍 입력</label>
+          <p><code>{_escape(concat_manifest or mp4_info.get('source_timing_plan', '') if isinstance(mp4_info, dict) else '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>자막 패키징</label>
+          <p>{_escape(subtitle_mode)} · SRT <code>{_escape(subtitle_sidecars.get('srt', '') if isinstance(subtitle_sidecars, dict) else '')}</code></p>
+        </div>
+      </div>
       <form method="post" action="/ffmpeg-guide">
         <input type="hidden" name="project_id" value="{_escape(project_id)}">
         <div class="actions">
@@ -727,6 +751,37 @@ def _render_project_detail(project_id: str) -> str:
           <label>설치 확인</label>
           <p><code>{_escape(verify_command or 'ffmpeg -version')}</code></p>
         </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>수동 업로드 미디어 패키지</h2>
+      <p class="muted">preview.mp4와 SRT/VTT sidecar 자막을 수동 업로드 패키지의 media 폴더로 묶습니다. 실제 업로드는 실행하지 않습니다.</p>
+      <form method="post" action="/final-media-package">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">미디어 패키지 생성</button>
+          <span class="muted">상태: {_escape(final_media_status)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>media 폴더</label>
+          <p><code>{_escape(final_media_dir)}</code></p>
+          <label>누락 항목</label>
+          <p>{_escape(final_media_missing_text)}</p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(final_media_next_step)}</p>
+          <label>패키지 상태 파일</label>
+          <p><code>{_escape(package_dir / 'final_media_package.json')}</code></p>
+        </div>
+      </div>
+      <div class="grid three">
+        <div><label>MP4</label><p><code>{_escape(final_media_mp4 or '아직 패키징되지 않았습니다.')}</code></p></div>
+        <div><label>SRT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p></div>
+        <div><label>VTT</label><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
       </div>
     </section>
 
@@ -971,6 +1026,7 @@ def _render_page(
     }}
     .grid {{ display: grid; gap: 14px; }}
     .two {{ grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }}
+    .three {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
     label {{ display: block; font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 7px; }}
     input, textarea, select {{
       width: 100%;
@@ -1029,7 +1085,8 @@ def _render_page(
     @media (max-width: 760px) {{
       header {{ padding: 18px; }}
       main {{ padding: 14px; }}
-      .two {{ grid-template-columns: 1fr; }}
+      .two,
+      .three {{ grid-template-columns: 1fr; }}
       .detail-head {{ grid-template-columns: 1fr; }}
     }}
   </style>
@@ -1339,6 +1396,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/ffmpeg-guide":
                 project_id = params.get("project_id", [""])[0]
                 create_ffmpeg_setup_guide(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/final-media-package":
+                project_id = params.get("project_id", [""])[0]
+                package_final_media(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return
