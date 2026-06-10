@@ -13,6 +13,7 @@ from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
+from ai_shorts.weekly_queue import mark_slot_promoted, save_weekly_plan_queue
 
 
 def test_default_app_state_has_autosave_enabled() -> None:
@@ -169,3 +170,16 @@ def test_project_dashboard_reports_first_blocking_gate(tmp_path) -> None:
     summary = summarize_project_gate(tmp_path)
     assert summary["blocking_gate"] == "project_review"
     assert "검토" in summary["next_step"]
+
+
+def test_weekly_plan_queue_marks_promoted_slot(tmp_path, monkeypatch) -> None:
+    from ai_shorts import weekly_queue
+
+    monkeypatch.setattr(weekly_queue, "WEEKLY_PLAN_QUEUE_PATH", tmp_path / "weekly_plan_queue.json")
+    plan = create_weekly_plan([TopicInsight(topic="큐 테스트")], target_count=2).to_dict()
+    queue = save_weekly_plan_queue(plan)
+    assert queue["slots"][0]["status"] == "queued"
+
+    updated = mark_slot_promoted("큐 테스트", "project-1")
+    assert updated["slots"][0]["status"] == "promoted_to_draft"
+    assert updated["slots"][0]["promoted_project_id"] == "project-1"

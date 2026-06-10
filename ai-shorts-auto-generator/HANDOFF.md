@@ -284,6 +284,23 @@ Next recommended work:
 
 - Add weekly planner-to-draft queue so 2 to 3 planned topics can be promoted into saved drafts.
 
+## 2026-06-10 Weekly Plan Queue Step
+
+Added weekly plan promotion queue:
+
+- `src/ai_shorts/weekly_queue.py` saves the latest weekly plan to `data/weekly_plan_queue.json`.
+- Weekly plan results now show a "저장된 초안으로 승격" action for each planned topic.
+- Promoting a slot creates a normal autosaved draft package and marks the queue slot as `promoted_to_draft`.
+
+Verification target:
+
+- Compile weekly queue, web, and tests.
+- End-to-end create a weekly plan, promote a slot, and verify `app_state.json` contains the new draft.
+
+Next recommended work:
+
+- Add a lightweight growth-learning import form so uploaded performance notes can feed future weekly scores.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

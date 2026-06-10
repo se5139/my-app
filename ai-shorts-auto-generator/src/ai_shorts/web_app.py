@@ -10,6 +10,7 @@ from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
+from .weekly_queue import mark_slot_promoted, save_weekly_plan_queue
 from .workflow import (
     check_or_render_mp4,
     create_draft_package,
@@ -455,13 +456,26 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
     plan_html = ""
     if plan:
         slots = "".join(
-            f"<li><strong>{_escape(slot.get('topic'))}</strong><br><span>{_escape(slot.get('reason'))}</span></li>"
+            f"""
+            <li>
+              <strong>{_escape(slot.get('topic'))}</strong><br>
+              <span>{_escape(slot.get('reason'))}</span>
+              <form method="post" action="/promote-plan-slot">
+                <input type="hidden" name="topic" value="{_escape(slot.get('topic'))}">
+                <input type="hidden" name="reason" value="{_escape(slot.get('reason'))}">
+                <div class="actions">
+                  <button type="submit">저장된 초안으로 승격</button>
+                </div>
+              </form>
+            </li>
+            """
             for slot in plan.get("slots", [])
         )
         plan_html = f"""
         <section class="band">
           <h2>주간 계획</h2>
           <p>{_escape(plan.get('automation_note'))}</p>
+          <p class="muted">선택한 슬롯은 즉시 autosave 프로젝트로 저장되고 최근 초안 목록에 나타납니다.</p>
           <ol class="scenes">{slots}</ol>
         </section>
         """
@@ -657,7 +671,17 @@ class Handler(BaseHTTPRequestHandler):
                 count = int(params.get("count", ["2"])[0] or 2)
                 topics = [line.strip() for line in topics_text.splitlines() if line.strip()]
                 plan = create_weekly_plan([TopicInsight(topic=topic) for topic in topics], count)
+                save_weekly_plan_queue(plan.to_dict())
                 self._send(_render_page(plan=plan.to_dict()))
+                return
+            if self.path == "/promote-plan-slot":
+                topic = params.get("topic", [""])[0]
+                reason = params.get("reason", [""])[0]
+                result = create_draft_package(topic, f"Weekly plan promotion: {reason}")
+                project_id = result.get("project", {}).get("id", "")
+                if project_id:
+                    mark_slot_promoted(topic, project_id)
+                self._send(_render_page(result=result))
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]
