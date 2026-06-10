@@ -5528,6 +5528,21 @@ def result_detail_page(name: str, message: str = "") -> str:
             f"{html.escape(str(dimensions))} · {html.escape(str(frames))}프레임 · {html.escape(size)}</span></div>"
         )
 
+    def motion_preview_tile(label: str, info: object) -> str:
+        data = info if isinstance(info, dict) else {}
+        file_value = str(data.get("file", ""))
+        exists = bool(data.get("exists")) and file_value
+        if not exists:
+            return f"<div class='motion-preview missing-preview'><strong>{html.escape(label)}</strong><span>미리보기 없음</span></div>"
+        href = "/" + file_value.replace("\\", "/")
+        return (
+            f"<a class='motion-preview' href='{html.escape(href)}'>"
+            f"<strong>{html.escape(label)}</strong>"
+            f"<img src='{html.escape(href)}' alt='{html.escape(label)} 움직임 미리보기'>"
+            f"<span>{html.escape(str(data.get('format', '-')))} · {html.escape(kb_text(data.get('bytes', 0)))}</span>"
+            f"</a>"
+        )
+
     animation_slots = animation_quality.get("slots", []) if isinstance(animation_quality, dict) else []
     animation_quality_html = (
         "".join(
@@ -5535,6 +5550,10 @@ def result_detail_page(name: str, message: str = "") -> str:
             <div class="motion-card {tone(slot.get("status", ""))}">
               <div class="review-title"><strong>#{int(slot.get("slot", 0)):02d} {html.escape(str(slot.get("phrase", "")))}</strong><span>{html.escape(str(slot.get("emotion", "")))}</span></div>
               <p>{badge("상태", slot.get("status", ""))}</p>
+              <div class="motion-preview-grid">
+                {motion_preview_tile("제출 WebP 미리보기", slot.get("webp", {}))}
+                {motion_preview_tile("GIF 소스 미리보기", slot.get("gif_source", {}))}
+              </div>
               <div class="motion-files">
                 {motion_file_line("제출 WebP", slot.get("webp", {}))}
                 {motion_file_line("GIF 소스", slot.get("gif_source", {}))}
@@ -5915,6 +5934,12 @@ def result_detail_page(name: str, message: str = "") -> str:
     .motion-card.good {{ background:#edfff6; border-color:#8eddbf; }}
     .motion-card.warn {{ background:#fff8df; border-color:#e9c961; }}
     .motion-card.danger {{ background:#fff0ec; border-color:#e49a83; }}
+    .motion-preview-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }}
+    .motion-preview {{ display:grid; gap:6px; color:#2d2424; text-decoration:none; border:1px solid #ead8bc; border-radius:14px; background:#fff; padding:10px; }}
+    .motion-preview strong, .motion-preview span {{ display:block; }}
+    .motion-preview strong {{ font-size:12px; }}
+    .motion-preview span {{ color:#6f625f; font-size:12px; }}
+    .motion-preview img {{ width:100%; aspect-ratio:1/1; object-fit:contain; border-radius:10px; background:#f7f4ef; border:1px solid #ead8bc; }}
     .motion-files {{ display:grid; gap:8px; margin:8px 0; }}
     .motion-file {{ border:1px solid #ead8bc; border-radius:14px; background:rgba(255,255,255,.72); padding:10px; }}
     .motion-file strong, .motion-file span {{ display:block; }}
@@ -5980,6 +6005,7 @@ def result_detail_page(name: str, message: str = "") -> str:
       .thumb-grid {{ grid-template-columns:1fr; gap:12px; }}
       .thumb-triple {{ grid-template-columns:1fr; }}
       .thumb-pair {{ grid-template-columns:1fr; }}
+      .motion-preview-grid {{ grid-template-columns:1fr; }}
       .workflow-panel {{ grid-template-columns:1fr; }}
       .next-step-preview-grid {{ grid-template-columns:1fr; }}
       .review-title {{ align-items:flex-start; flex-direction:column; gap:2px; }}
