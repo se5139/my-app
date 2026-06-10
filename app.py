@@ -3641,21 +3641,24 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
         "complete",
     } else "all"
 
-    def matches_stage(row: dict[str, object]) -> bool:
+    def matches_stage_value(row: dict[str, object], value: str) -> bool:
         stages = row.get("stages", {})
         if not isinstance(stages, dict):
             stages = {}
-        if stage_filter == "needs_review":
+        if value == "needs_review":
             return not bool(stages.get("review_action"))
-        if stage_filter == "needs_regen":
+        if value == "needs_regen":
             return bool(stages.get("review_action")) and not bool(stages.get("regenerated"))
-        if stage_filter == "needs_final":
+        if value == "needs_final":
             return bool(stages.get("regenerated")) and not bool(stages.get("final_candidates"))
-        if stage_filter == "needs_package":
+        if value == "needs_package":
             return bool(stages.get("final_candidates")) and not bool(stages.get("pre_submission"))
-        if stage_filter == "complete":
+        if value == "complete":
             return bool(stages.get("pre_submission"))
         return True
+
+    def matches_stage(row: dict[str, object]) -> bool:
+        return matches_stage_value(row, stage_filter)
 
     def matches_query(row: dict[str, object]) -> bool:
         if not query:
@@ -3670,9 +3673,6 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     rows = [row for row in all_rows if matches_stage(row) and matches_query(row)]
     total_rows = len(all_rows)
     filtered_rows = len(rows)
-    pre_submission_count = sum(1 for row in rows if row.get("pre_submission_status"))
-    final_count = sum(1 for row in rows if row.get("final_zip"))
-    regen_count = sum(1 for row in rows if any(label == "재생성" and enabled for label, enabled in row.get("stage_labels", [])))
     filter_options = [
         ("all", "전체"),
         ("needs_review", "수정계획 필요"),
@@ -3681,8 +3681,12 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
         ("needs_package", "제출전팩 필요"),
         ("complete", "완료"),
     ]
+    filter_counts = {
+        value: sum(1 for row in all_rows if matches_stage_value(row, value) and matches_query(row))
+        for value, _ in filter_options
+    }
     filter_links = "".join(
-        f"<a class='filter {'active' if value == stage_filter else ''}' href='/results?stage={html.escape(value)}&q={quote(query)}'>{html.escape(label)}</a>"
+        f"<a class='filter {'active' if value == stage_filter else ''}' href='/results?stage={html.escape(value)}&q={quote(query)}'>{html.escape(label)} <strong>{filter_counts.get(value, 0)}</strong></a>"
         for value, label in filter_options
     )
     row_html = ""
@@ -3790,6 +3794,7 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     .filter-form input {{ border:1px solid #d8ccbc; border-radius:999px; padding:10px 12px; min-width:220px; font:inherit; }}
     a.filter {{ background:#f7f4ef; border-color:#d8ccbc; color:#5d534e; }}
     a.filter.active {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+    a.filter strong {{ display:inline-block; margin-left:4px; padding:1px 6px; border-radius:999px; background:rgba(255,255,255,.72); }}
     button.filter-button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
@@ -3815,9 +3820,11 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     </div>
     <div class="summary">
       <div class="metric"><span>최근 결과</span><strong>{total_rows}</strong></div>
-      <div class="metric"><span>최종 후보 ZIP</span><strong>{final_count}</strong></div>
-      <div class="metric"><span>제출 전 패키지</span><strong>{pre_submission_count}</strong></div>
-      <div class="metric"><span>재생성 진행</span><strong>{regen_count}</strong></div>
+      <div class="metric"><span>수정계획 필요</span><strong>{filter_counts.get('needs_review', 0)}</strong></div>
+      <div class="metric"><span>재생성 필요</span><strong>{filter_counts.get('needs_regen', 0)}</strong></div>
+      <div class="metric"><span>최종후보 필요</span><strong>{filter_counts.get('needs_final', 0)}</strong></div>
+      <div class="metric"><span>제출전팩 필요</span><strong>{filter_counts.get('needs_package', 0)}</strong></div>
+      <div class="metric"><span>완료</span><strong>{filter_counts.get('complete', 0)}</strong></div>
     </div>
   </section>
   <section class="panel">
