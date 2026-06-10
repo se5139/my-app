@@ -4317,6 +4317,7 @@ def bulk_report_detail_page(name: str, status_filter: str = "all") -> str:
         detail_link = f"<a href='/result?name={quote(name_value)}'>결과 열기</a>" if safe_output_dir_by_name(name_value) else ""
         rows += f"""
         <tr>
+          <td><input type="checkbox" name="names" value="{html.escape(name_value)}" checked></td>
           <td><span class="badge {html.escape(status)}">{html.escape(status_labels.get(status, status))}</span></td>
           <td>{html.escape(name_value)}<br>{detail_link}</td>
           <td>{html.escape(str(item.get("reason", "")))}</td>
@@ -4324,7 +4325,7 @@ def bulk_report_detail_page(name: str, status_filter: str = "all") -> str:
         </tr>
         """
     if not rows:
-        rows = "<tr><td colspan='4'>기록된 항목이 없습니다.</td></tr>"
+        rows = "<tr><td colspan='5'>기록된 항목이 없습니다.</td></tr>"
     summary = "".join(
         f"<div class='metric'><span>{html.escape(label)}</span><strong>{html.escape(str(counts.get(key, 0)))}</strong></div>"
         for key, label in status_labels.items()
@@ -4354,6 +4355,7 @@ def bulk_report_detail_page(name: str, status_filter: str = "all") -> str:
     .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
     .actions {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
     .filter-row {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }}
+    .select-bar {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; padding:12px; border:1px solid #ead8bc; border-radius:18px; background:#fffaf0; }}
     table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
     th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
     th {{ color:#2d2424; background:#fff3d8; }}
@@ -4398,10 +4400,22 @@ def bulk_report_detail_page(name: str, status_filter: str = "all") -> str:
     <p>현재 표시 {len(visible_records)}개 / 전체 {filter_counts.get('all', 0)}개</p>
   </section>
   <section class="panel">
-    <table>
-      <thead><tr><th>상태</th><th>결과 폴더</th><th>사유</th><th>생성 파일</th></tr></thead>
-      <tbody>{rows}</tbody>
-    </table>
+    <form method="post" action="/bulk-review-action">
+      <input type="hidden" name="q" value="{html.escape(query)}">
+      <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+      <div class="select-bar">
+        <strong>선택 항목 다시 확인</strong>
+        <button type="submit" name="bulk_action" value="review">수정계획</button>
+        <button type="submit" name="bulk_action" value="regen">재생성</button>
+        <button type="submit" name="bulk_action" value="final">최종 후보</button>
+        <button type="submit" name="bulk_action" value="package">제출 전 패키지</button>
+        <small>현재 보이는 항목만 기본 체크됩니다.</small>
+      </div>
+      <table>
+        <thead><tr><th>선택</th><th>상태</th><th>결과 폴더</th><th>사유</th><th>생성 파일</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </form>
   </section>
 </main>
 </body>
