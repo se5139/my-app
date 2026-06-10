@@ -28,6 +28,7 @@ from .workflow import (
     generate_placeholder_render,
     generate_preview_render,
     generate_subtitle_export,
+    mix_audio_for_video,
     package_final_media,
     prepare_audio_assets,
     update_final_upload_checklist,
@@ -421,6 +422,7 @@ def _render_project_detail(project_id: str) -> str:
     timing_plan = read_json(render_dir / "timing_plan.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
     audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
+    audio_mix_status = read_json(audio_dir / "audio_mix_status.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_info = read_json(preview_dir / "mp4_status.json", {})
     ffmpeg_guide = read_json(preview_dir / "ffmpeg_setup_guide.json", {})
@@ -510,6 +512,10 @@ def _render_project_detail(project_id: str) -> str:
     audio_bgm = audio_manifest.get("bgm", {}) if isinstance(audio_manifest, dict) else {}
     audio_mix = audio_manifest.get("mix", {}) if isinstance(audio_manifest, dict) else {}
     audio_next_step = audio_manifest.get("next_step", "로컬 음성 파일과 출처 메모를 등록하세요.") if isinstance(audio_manifest, dict) else "로컬 음성 파일과 출처 메모를 등록하세요."
+    audio_mix_state = audio_mix_status.get("status", "not_created") if isinstance(audio_mix_status, dict) else "not_created"
+    mixed_audio_path = audio_mix_status.get("mixed_audio_path", "") if isinstance(audio_mix_status, dict) else ""
+    final_video_path = audio_mix_status.get("final_video_path", "") if isinstance(audio_mix_status, dict) else ""
+    audio_mix_next_step = audio_mix_status.get("next_step", "MP4와 오디오 게이트 통과 후 합성하세요.") if isinstance(audio_mix_status, dict) else "MP4와 오디오 게이트 통과 후 합성하세요."
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -824,6 +830,32 @@ def _render_project_detail(project_id: str) -> str:
         <div>
           <label>설치 확인</label>
           <p><code>{_escape(verify_command or 'ffmpeg -version')}</code></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>오디오 믹싱/MP4 합성</h2>
+      <p class="muted">로컬 음성, BGM, 효과음을 mixed_audio.m4a로 믹싱한 뒤 preview.mp4에 합쳐 final_preview.mp4를 만듭니다.</p>
+      <form method="post" action="/audio-mix">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">오디오 합성 실행</button>
+          <span class="muted">상태: {_escape(audio_mix_state)}</span>
+        </div>
+      </form>
+      <div class="grid three">
+        <div>
+          <label>mixed_audio</label>
+          <p><code>{_escape(mixed_audio_path or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>final_preview.mp4</label>
+          <p><code>{_escape(final_video_path or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(audio_mix_next_step)}</p>
         </div>
       </div>
     </section>
@@ -1488,6 +1520,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/ffmpeg-guide":
                 project_id = params.get("project_id", [""])[0]
                 create_ffmpeg_setup_guide(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/audio-mix":
+                project_id = params.get("project_id", [""])[0]
+                mix_audio_for_video(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

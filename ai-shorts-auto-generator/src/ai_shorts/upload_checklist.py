@@ -11,6 +11,7 @@ def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> 
     preview_dir = project_dir / "renders" / "preview"
     subtitle_dir = project_dir / "renders" / "subtitles"
     audio_dir = project_dir / "renders" / "audio"
+    final_dir = project_dir / "renders" / "final"
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export = read_json(package_dir / "render_export_status.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
@@ -18,6 +19,7 @@ def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> 
     project = read_json(project_dir / "project.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
     audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
+    audio_mix_status = read_json(audio_dir / "audio_mix_status.json", {})
 
     checks = {
         "human_project_review": project.get("review", {}).get("status") == "approved_for_export",
@@ -25,6 +27,7 @@ def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> 
         "asset_source_notes_present": (package_dir / "asset_source_notes.json").exists() and isinstance(asset_notes, dict),
         "subtitles_ready": subtitle_manifest.get("status") == "subtitles_ready",
         "audio_ready": audio_manifest.get("status") == "audio_ready",
+        "audio_mix_ready": audio_mix_status.get("status") == "final_video_ready" and (final_dir / "final_preview.mp4").exists(),
         "final_media_ready": final_media_package.get("status") == "final_media_ready",
         "render_export_ready": render_export.get("status") == "ready_for_manual_upload",
         "mp4_present": (preview_dir / "preview.mp4").exists(),
@@ -61,6 +64,8 @@ def _next_step(missing: list[str]) -> str:
         return "Create and review SRT/VTT subtitles before final manual upload."
     if "audio_ready" in missing:
         return "Register local voice/BGM/SFX files and pass the audio gate before final manual upload."
+    if "audio_mix_ready" in missing:
+        return "Mix local audio and create final_preview.mp4 before final manual upload."
     if "final_media_ready" in missing:
         return "Package preview.mp4 with sidecar SRT/VTT subtitles before final manual upload."
     if "compliance_passed" in missing:

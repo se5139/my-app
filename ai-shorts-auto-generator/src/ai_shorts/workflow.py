@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .audio_assets import build_audio_asset_manifest
+from .audio_mixer import mix_audio_into_video
 from .package_exporter import export_manual_upload_package
 from .final_media_package import build_final_media_package
 from .ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
@@ -132,6 +133,14 @@ def check_or_render_mp4(project_id: str, render: bool = False) -> dict[str, Any]
             generate_subtitle_export(project_id)
         return render_mp4_from_preview(project_id, project_dir)
     return mp4_status(project_dir)
+
+
+def mix_audio_for_video(project_id: str) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    return mix_audio_into_video(project_id, project_dir)
 
 
 def package_final_media(project_id: str) -> dict[str, Any]:

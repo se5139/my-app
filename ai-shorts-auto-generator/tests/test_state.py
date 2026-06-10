@@ -5,6 +5,7 @@ import wave
 import zipfile
 
 from ai_shorts.audio_assets import build_audio_asset_manifest
+from ai_shorts.audio_mixer import mix_audio_into_video
 from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
 from ai_shorts.api_smoke_check import run_api_smoke_check
 from ai_shorts.cost_guard import cost_guard_summary, evaluate_api_call, save_cost_guard
@@ -260,6 +261,38 @@ def test_audio_asset_manifest_validates_local_voice_and_bgm(tmp_path) -> None:
     assert (tmp_path / "renders" / "audio" / "audio_manifest.json").exists()
 
 
+def test_audio_mixer_creates_mixed_audio_and_final_video(tmp_path, monkeypatch) -> None:
+    from ai_shorts import audio_mixer
+
+    voice_path = _write_silent_wav(tmp_path / "voice.wav", 1)
+    build_audio_asset_manifest(
+        tmp_path,
+        {"voice_path": str(voice_path), "voice_source_note": "직접 녹음", "target_duration_sec": 1},
+    )
+    preview_dir = tmp_path / "renders" / "preview"
+    preview_dir.mkdir(parents=True)
+    preview_mp4 = preview_dir / "preview.mp4"
+    preview_mp4.write_bytes(b"mp4")
+    write_json(preview_dir / "mp4_status.json", {"status": "mp4_ready", "mp4_path": str(preview_mp4)})
+
+    def fake_run(command, capture_output, text, timeout):
+        output_path = tmp_path / command[-1] if not str(command[-1]).startswith(str(tmp_path)) else command[-1]
+        output_path = tmp_path / "renders" / "audio" / "mixed_audio.m4a" if str(output_path).endswith(".m4a") else tmp_path / "renders" / "final" / "final_preview.mp4"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"media")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(audio_mixer, "find_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(audio_mixer.subprocess, "run", fake_run)
+
+    status = mix_audio_into_video("p1", tmp_path)
+
+    assert status["status"] == "final_video_ready"
+    assert (tmp_path / "renders" / "audio" / "mixed_audio.m4a").exists()
+    assert (tmp_path / "renders" / "final" / "final_preview.mp4").exists()
+    assert status["no_paid_api_calls"] is True
+
+
 def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     package_dir = tmp_path / "exports" / "manual_upload_package"
     preview_dir = tmp_path / "renders" / "preview"
@@ -282,14 +315,25 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
         tmp_path,
         {"voice_path": str(voice_path), "voice_source_note": "직접 녹음", "target_duration_sec": 1},
     )
+    mixed_audio = tmp_path / "renders" / "audio" / "mixed_audio.m4a"
+    final_video = tmp_path / "renders" / "final" / "final_preview.mp4"
+    mixed_audio.write_bytes(b"audio")
+    final_video.parent.mkdir(parents=True)
+    final_video.write_bytes(b"mp4")
+    write_json(
+        tmp_path / "renders" / "audio" / "audio_mix_status.json",
+        {"status": "final_video_ready", "mixed_audio_path": str(mixed_audio), "final_video_path": str(final_video)},
+    )
 
     manifest = build_final_media_package(tmp_path)
 
     assert manifest["status"] == "final_media_ready"
-    assert (package_dir / "media" / "preview.mp4").exists()
+    assert (package_dir / "media" / "preview_silent.mp4").exists()
+    assert (package_dir / "media" / "final_preview.mp4").exists()
     assert (package_dir / "media" / "subtitles.srt").exists()
     assert (package_dir / "media" / "subtitles.vtt").exists()
     assert (package_dir / "media" / "audio" / "audio_manifest.json").exists()
+    assert (package_dir / "media" / "audio" / "mixed_audio.m4a").exists()
     assert manifest["subtitle_mode"] == "sidecar"
 
 
@@ -310,6 +354,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert checklist["manual_upload_allowed"] is False
     assert "mp4_present" in checklist["missing"]
     assert "audio_ready" in checklist["missing"]
+    assert "audio_mix_ready" in checklist["missing"]
     assert "final_media_ready" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()

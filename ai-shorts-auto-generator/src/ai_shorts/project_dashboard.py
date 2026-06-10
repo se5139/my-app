@@ -13,6 +13,7 @@ def summarize_project_gate(project_dir: Path) -> dict[str, Any]:
     preview_dir = project_dir / "renders" / "preview"
     subtitle_dir = project_dir / "renders" / "subtitles"
     audio_dir = project_dir / "renders" / "audio"
+    final_dir = project_dir / "renders" / "final"
 
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export = read_json(package_dir / "render_export_status.json", {})
@@ -22,6 +23,7 @@ def summarize_project_gate(project_dir: Path) -> dict[str, Any]:
     mp4_status = read_json(preview_dir / "mp4_status.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
     audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
+    audio_mix_status = read_json(audio_dir / "audio_mix_status.json", {})
 
     gates = {
         "project_review": project.get("review", {}).get("status") == "approved_for_export",
@@ -31,11 +33,12 @@ def summarize_project_gate(project_dir: Path) -> dict[str, Any]:
         "audio": audio_manifest.get("status") == "audio_ready",
         "gif_preview": preview_manifest.get("status") == "preview_ready" and (preview_dir / "preview.gif").exists(),
         "mp4": mp4_status.get("status") == "mp4_ready" and (preview_dir / "preview.mp4").exists(),
+        "audio_mix": audio_mix_status.get("status") == "final_video_ready" and (final_dir / "final_preview.mp4").exists(),
         "final_media": final_media.get("status") == "final_media_ready",
         "render_export": render_export.get("status") == "ready_for_manual_upload",
         "final_upload": final_upload.get("status") == "final_upload_ready",
     }
-    order = ["project_review", "compliance", "render_plan", "subtitles", "audio", "gif_preview", "mp4", "final_media", "render_export", "final_upload"]
+    order = ["project_review", "compliance", "render_plan", "subtitles", "audio", "gif_preview", "mp4", "audio_mix", "final_media", "render_export", "final_upload"]
     blocking_gate = next((name for name in order if not gates[name]), "complete")
     return {
         "project_status": project.get("status", "unknown"),
@@ -60,6 +63,8 @@ def _next_step(blocking_gate: str, render_export: dict[str, Any], final_upload: 
         return "GIF 미리보기를 생성하세요."
     if blocking_gate == "mp4":
         return "ffmpeg 설치 후 MP4 변환을 완료하세요."
+    if blocking_gate == "audio_mix":
+        return "ffmpeg로 음성/BGM/효과음을 믹싱하고 final_preview.mp4를 생성하세요."
     if blocking_gate == "final_media":
         return "preview.mp4와 SRT/VTT 자막을 수동 업로드 패키지 media 폴더로 묶으세요."
     if blocking_gate == "render_export":
