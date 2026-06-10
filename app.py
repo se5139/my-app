@@ -2982,6 +2982,20 @@ def build_final_candidates(output_dir: Path, selections: dict[str, str]) -> dict
     return final_report
 
 
+def default_final_candidate_selections(output_dir: Path) -> dict[str, str]:
+    action_regeneration = read_json_file(output_dir / "action_regeneration" / "action_regeneration_report.json", {})
+    if not isinstance(action_regeneration, dict):
+        return {}
+    selections: dict[str, str] = {}
+    for item in action_regeneration.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        slot = str(item.get("slot", ""))
+        if slot.isdigit():
+            selections[slot] = "regen"
+    return selections
+
+
 def build_final_candidate_audit(output_dir: Path) -> dict[str, object]:
     final_dir = output_dir / "final_candidates"
     final_report = read_json_file(final_dir / "final_candidates_report.json", {})
@@ -3843,7 +3857,8 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
         <strong>일괄 작업</strong>
         <button type="submit" name="bulk_action" value="review">선택 항목 수정계획 생성</button>
         <button type="submit" name="bulk_action" value="regen">선택 항목 재생성 실행</button>
-        <small>수정계획/재생성이 이미 있는 결과는 건너뜁니다.</small>
+        <button type="submit" name="bulk_action" value="final">선택 항목 최종 후보 ZIP 생성</button>
+        <small>이미 준비된 단계는 건너뜁니다. 최종 후보는 재생성본이 있는 컷만 재생성본을 우선 사용합니다.</small>
       </div>
       <table>
         <thead>
@@ -7692,7 +7707,16 @@ class Handler(BaseHTTPRequestHandler):
                 if output_dir is None:
                     missing += 1
                     continue
-                if action == "regen":
+                if action == "final":
+                    if not (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
+                        blocked += 1
+                        continue
+                    if (output_dir / "final_candidates" / "final_candidates_report.json").exists():
+                        skipped += 1
+                        continue
+                    build_final_candidates(output_dir, default_final_candidate_selections(output_dir))
+                    created += 1
+                elif action == "regen":
                     if not (output_dir / "review_action_plan.json").exists():
                         blocked += 1
                         continue
@@ -7709,6 +7733,8 @@ class Handler(BaseHTTPRequestHandler):
                     created += 1
             if not form.get("names", []):
                 message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
+            elif action == "final":
+                message = f"일괄 최종 후보 ZIP 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 재생성 없음 {blocked}개 / 찾을 수 없음 {missing}개"
             elif action == "regen":
                 message = f"일괄 재생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 수정계획 없음 {blocked}개 / 찾을 수 없음 {missing}개"
             else:
