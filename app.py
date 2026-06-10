@@ -28,6 +28,8 @@ except ModuleNotFoundError as exc:
         "Pillow is required. Install it with: python -m pip install -r requirements.txt"
     ) from exc
 
+from modules.kakao_studio_excel import KakaoStudioExcelLearningEngine
+
 
 APP_NAME = "Kakao Emoticon Maker v100 Clean"
 APP_VERSION = "v100-clean"
@@ -2588,7 +2590,7 @@ def system_status_page() -> str:
   <main>
     <section class="panel">
       <h1>실행 상태</h1>
-      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/results">최근 결과물</a><a class="button" href="/memory">진화 메모리</a><a class="button" href="/api-settings">API 키 안내</a><a class="button" href="/release-check">배포 점검</a></p>
+      <p><a class="button" href="/">제작 화면으로</a><a class="button" href="/results">최근 결과물</a><a class="button" href="/excel-analysis">엑셀 분석</a><a class="button" href="/memory">진화 메모리</a><a class="button" href="/api-settings">API 키 안내</a><a class="button" href="/release-check">배포 점검</a></p>
     </section>
     <section class="panel">
       <h2>웹서버 비용</h2>
@@ -2971,6 +2973,153 @@ def kakao_policy_check_page(message: str = "") -> str:
 </main>
 </body>
 </html>"""
+
+
+def excel_report_link(path_value: object, label: str) -> str:
+    path = Path(str(path_value or ""))
+    if not path.exists():
+        return ""
+    href = "/" + path.as_posix()
+    return f'<a class="button" href="{html.escape(href)}">{html.escape(label)}</a>'
+
+
+def latest_excel_analysis_report() -> dict[str, object]:
+    root = OUTPUT_ROOT / "kakao_studio_excel"
+    reports = sorted(root.glob("kakao_studio_excel_v39_*/report/kakao_studio_excel_v39.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not reports:
+        return {}
+    payload = read_json_file(reports[0], {})
+    if isinstance(payload, dict):
+        payload.setdefault("json_path", str(reports[0]))
+        payload.setdefault("html_path", str(reports[0].with_suffix(".html")))
+        return payload
+    return {}
+
+
+def excel_analysis_page(message: str = "", report: dict[str, object] | None = None) -> str:
+    report = report or latest_excel_analysis_report()
+    files = report.get("files", {}) if isinstance(report, dict) else {}
+    if not isinstance(files, dict):
+        files = {}
+    performance_scores = report.get("performance_scores", []) if isinstance(report, dict) else []
+    recommendations = report.get("extension_recommendations", []) if isinstance(report, dict) else []
+    warnings = report.get("warnings", []) if isinstance(report, dict) else []
+    health = report.get("data_health", {}) if isinstance(report, dict) else {}
+    period = report.get("period", {}) if isinstance(report, dict) else {}
+    summary_html = "<p>아직 엑셀 분석 리포트가 없습니다.</p>"
+    if isinstance(report, dict) and report:
+        score_rows = "".join(
+            f"<li>{html.escape(str(item.get('emoticon_name', item.get('title', '이모티콘'))))}: "
+            f"발신 {html.escape(str(item.get('sent_count', 0)))} / 이용자 {html.escape(str(item.get('user_count', 0)))} / "
+            f"판매 {html.escape(str(item.get('sales_count', 0)))} / 점수 {html.escape(str(item.get('score', item.get('total_score', 0))))}</li>"
+            for item in performance_scores[:8]
+            if isinstance(item, dict)
+        )
+        rec_rows = "".join(
+            f"<li>{html.escape(str(item.get('title', item.get('name', '추천'))))}: {html.escape(str(item.get('reason', item.get('recommendation', ''))))}</li>"
+            for item in recommendations[:8]
+            if isinstance(item, dict)
+        )
+        warning_html = html_list([str(item) for item in warnings[:8]], "주의 메시지가 없습니다.")
+        summary_html = f"""
+        <section class="panel">
+          <h2>최근 엑셀 분석 결과</h2>
+          <p>기간 {html.escape(str(period.get('start_date', '')))} ~ {html.escape(str(period.get('end_date', '')))}</p>
+          <p>플러스 {html.escape(str(health.get('plus_row_count', len(report.get('plus_rows', [])))))}행 / 판매상세 {html.escape(str(health.get('sales_detail_count', len(report.get('sales_details', [])))))}행 / 성과점수 {html.escape(str(len(performance_scores)))}개</p>
+          <div class="button-row">
+            {excel_report_link(files.get('html_path') or report.get('html_path'), 'HTML 리포트 열기')}
+            {excel_report_link(files.get('json_path') or report.get('json_path'), 'JSON 리포트 열기')}
+            {excel_report_link(files.get('zip_path'), '분석 ZIP 열기')}
+          </div>
+          <h3>상위 성과</h3>
+          {'<ul>' + score_rows + '</ul>' if score_rows else '<p>성과 점수 데이터가 없습니다.</p>'}
+          <h3>확장 추천</h3>
+          {'<ul>' + rec_rows + '</ul>' if rec_rows else '<p>확장 추천 데이터가 없습니다.</p>'}
+          <h3>주의 메시지</h3>
+          {warning_html}
+        </section>
+        """
+    notice = f'<div class="message">{html.escape(message)}</div>' if message else ""
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Excel Analysis</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; color: #172033; }}
+    main {{ max-width: 1040px; margin: 0 auto; padding: 28px; }}
+    .panel {{ background: #fff; border: 1px solid #d9deea; border-radius: 8px; padding: 20px; margin: 16px 0; }}
+    label {{ display: block; font-weight: 700; margin: 14px 0 6px; }}
+    input[type="file"], input[type="text"] {{ width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #c7cfdd; border-radius: 6px; background: #fff; }}
+    .button, button {{ display: inline-block; border: 0; border-radius: 6px; background: #2166d1; color: white; padding: 10px 14px; margin: 4px 6px 4px 0; text-decoration: none; cursor: pointer; }}
+    .secondary {{ background: #546179; }}
+    .button-row {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
+    .message {{ border-left: 4px solid #2166d1; background: #eaf1ff; padding: 12px; margin: 12px 0; }}
+    .hint {{ color: #566276; }}
+    @media (max-width: 760px) {{ main {{ padding: 16px; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <p><a class="button secondary" href="/">제작 화면</a><a class="button secondary" href="/results">최근 결과물</a><a class="button secondary" href="/status">실행 상태</a></p>
+    <h1>카카오 엑셀 통계 분석</h1>
+    <p class="hint">카카오 판매내역과 이모티콘 플러스 발신 통계 엑셀을 로컬에서만 분석합니다. 외부 API 호출이나 비용 발생 호출은 없습니다.</p>
+    {notice}
+    <section class="panel">
+      <h2>엑셀 업로드</h2>
+      <form method="post" action="/excel-analysis/run" enctype="multipart/form-data">
+        <label for="project_name">프로젝트 이름</label>
+        <input id="project_name" name="project_name" type="text" value="kakao_excel_analysis">
+        <label for="plus_xlsx">이모티콘 플러스 발신 통계 엑셀</label>
+        <input id="plus_xlsx" name="plus_xlsx" type="file" accept=".xlsx">
+        <label for="sales_xlsx">판매내역 엑셀</label>
+        <input id="sales_xlsx" name="sales_xlsx" type="file" accept=".xlsx">
+        <label><input type="checkbox" name="confirm_save" value="1" checked> 확인 후 성장형 학습 데이터로 누적 저장</label>
+        <p class="hint">둘 중 하나만 올려도 리포트가 생성됩니다. 원본 엑셀은 결과 폴더 안에 복사되어 추적됩니다.</p>
+        <button type="submit">엑셀 분석 실행</button>
+      </form>
+    </section>
+    {summary_html}
+  </main>
+</body>
+</html>"""
+
+
+def save_uploaded_xlsx(files: dict[str, tuple[str, bytes]], key: str, upload_dir: Path) -> Path | None:
+    uploaded = files.get(key)
+    if not uploaded:
+        return None
+    filename, data = uploaded
+    if not data:
+        return None
+    source_name = Path(filename).name
+    if Path(source_name).suffix.lower() != ".xlsx":
+        raise ValueError(f"{key} 파일은 .xlsx만 업로드할 수 있습니다.")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = safe_slug(Path(source_name).stem, key) + ".xlsx"
+    target = upload_dir / safe_name
+    target.write_bytes(data)
+    return target
+
+
+def run_excel_analysis(form: dict[str, list[str]], files: dict[str, tuple[str, bytes]]) -> dict[str, object]:
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    upload_dir = OUTPUT_ROOT / "_excel_uploads" / timestamp
+    plus_path = save_uploaded_xlsx(files, "plus_xlsx", upload_dir)
+    sales_path = save_uploaded_xlsx(files, "sales_xlsx", upload_dir)
+    if not plus_path and not sales_path:
+        raise ValueError("분석할 .xlsx 파일을 하나 이상 업로드하세요.")
+    project_name = safe_slug(form_value(form, "project_name", "kakao_excel_analysis"), "kakao_excel_analysis")
+    confirm_save = form_value(form, "confirm_save", "0") == "1"
+    report = KakaoStudioExcelLearningEngine().build_report(
+        OUTPUT_ROOT / "kakao_studio_excel",
+        plus_xlsx=plus_path,
+        sales_xlsx=sales_path,
+        project_name=project_name,
+        confirm_save=confirm_save,
+    )
+    return report.to_dict()
 
 
 def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
@@ -8726,7 +8875,7 @@ def page(
           복잡한 v92를 그대로 끌고 가지 않고, 제출물 생성에 필요한 최소 흐름부터 다시 세웁니다.
           지금 버전은 일반/미니, 정지형/움직이는 유형별 개수와 용량을 분리해 제출 ZIP을 점검합니다.
         </p>
-        <p><a class="memory-link" href="/results">최근 결과물</a> <a class="memory-link" href="/memory">진화 메모리 보기</a> <a class="memory-link" href="/status">실행 상태 보기</a> <a class="memory-link" href="/api-settings">API 키 안내</a> <a class="memory-link" href="/release-check">배포 점검</a></p>
+        <p><a class="memory-link" href="/results">최근 결과물</a> <a class="memory-link" href="/excel-analysis">엑셀 분석</a> <a class="memory-link" href="/memory">진화 메모리 보기</a> <a class="memory-link" href="/status">실행 상태 보기</a> <a class="memory-link" href="/api-settings">API 키 안내</a> <a class="memory-link" href="/release-check">배포 점검</a></p>
         {error_html}
         {research_html}
         {result_html}
@@ -8828,6 +8977,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/kakao-policy-check":
             self.respond(200, kakao_policy_check_page())
             return
+        if self.path == "/excel-analysis":
+            self.respond(200, excel_analysis_page())
+            return
         if self.path == "/release-check":
             self.respond(200, release_check_page())
             return
@@ -8885,6 +9037,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api-usage/reset":
             reset_api_usage_ledger()
             self.respond(200, api_settings_page("API 사용량 원장을 초기화했습니다. 키와 환경변수는 변경하지 않았습니다."))
+            return
+        if self.path == "/excel-analysis/run":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            content_type = self.headers.get("Content-Type", "")
+            form, files = parse_multipart_form(content_type, body)
+            try:
+                report = run_excel_analysis(form, files)
+                score_count = len(report.get("performance_scores", [])) if isinstance(report, dict) else 0
+                self.respond(200, excel_analysis_page(f"엑셀 분석 완료: 성과 점수 {score_count}개를 생성했습니다.", report))
+            except Exception as exc:
+                self.respond(400, excel_analysis_page(f"엑셀 분석 실패: {exc}"))
             return
         if self.path == "/bulk-review-action":
             length = int(self.headers.get("Content-Length", "0"))
