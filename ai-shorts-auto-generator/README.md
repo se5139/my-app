@@ -124,6 +124,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - first-run setup checklist that turns environment warnings into ordered actions
 - setup guide export that writes first-run action Markdown files under `data/setup_guides`
 - setup guide index/detail viewer for reading generated Markdown inside the web UI
+- one-click handoff report that combines environment status, checklist, latest snapshot, and setup guide links
 
 ## New PC Restore Guide
 

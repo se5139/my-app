@@ -472,6 +472,23 @@ Next recommended work:
 
 - Add a one-click handoff report that combines environment status, checklist, latest snapshot, and setup guide links.
 
+## 2026-06-10 Handoff Report Step
+
+Added one-click handoff reporting:
+
+- `src/ai_shorts/handoff_report.py` writes Markdown and JSON reports under `data/handoff_reports`.
+- The report combines local environment status, first-run checklist, latest operations snapshot, and setup guide links.
+- The home page now includes a `handoff 보고서 생성` action and shows generated report paths.
+
+Verification target:
+
+- Compile handoff report, web app, and tests.
+- Smoke-test report creation and web rendering.
+
+Next recommended work:
+
+- Add an in-app handoff report viewer and latest-report link.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

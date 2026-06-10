@@ -4,6 +4,7 @@ from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
 from ai_shorts.first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
+from ai_shorts.handoff_report import create_handoff_report
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
@@ -87,6 +88,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "첫 실행 설정 체크리스트" in html
     assert "설정 가이드 생성" in html
     assert "생성된 가이드 보기" in html
+    assert "handoff 보고서" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -334,6 +336,34 @@ def test_first_run_setup_lists_and_reads_guides(tmp_path, monkeypatch) -> None:
     detail = read_setup_guide(guides[0]["filename"])
     assert detail["filename"] == guides[0]["filename"]
     assert "Command Or Action" in detail["content"]
+
+
+def test_handoff_report_creates_markdown_and_manifest(tmp_path, monkeypatch) -> None:
+    from ai_shorts import first_run_setup, handoff_report, operations_snapshot
+
+    monkeypatch.setattr(first_run_setup, "SETUP_GUIDES_DIR", tmp_path / "setup_guides")
+    monkeypatch.setattr(operations_snapshot, "SNAPSHOT_DIR", tmp_path / "snapshots")
+    monkeypatch.setattr(handoff_report, "SNAPSHOT_DIR", tmp_path / "snapshots")
+    monkeypatch.setattr(handoff_report, "HANDOFF_REPORTS_DIR", tmp_path / "handoff_reports")
+    (tmp_path / "snapshots").mkdir(parents=True)
+    (tmp_path / "snapshots" / "operations_snapshot_test.zip").write_text("zip placeholder", encoding="utf-8")
+    export_setup_guides(
+        {
+            "checks": [
+                {"name": "Python", "status": "pass"},
+                {"name": "Git", "status": "warn"},
+                {"name": "Data folder", "status": "warn"},
+                {"name": "Projects", "status": "warn"},
+                {"name": "FFmpeg", "status": "warn"},
+            ]
+        }
+    )
+
+    report = create_handoff_report()
+    assert report["latest_snapshot"].endswith("operations_snapshot_test.zip")
+    assert report["setup_guide_count"] == 4
+    assert pathlib_path_exists(report["report_path"])
+    assert pathlib_path_exists(report["manifest_path"])
 
 
 def pathlib_path_exists(path: str) -> bool:

@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
+from .handoff_report import create_handoff_report
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -552,6 +553,7 @@ def _render_page(
     growth_import: dict | None = None,
     snapshot: dict | None = None,
     setup_guides: dict | None = None,
+    handoff_report: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -660,6 +662,19 @@ def _render_page(
           <p>가이드 <span class="status">{int(setup_guides.get('guide_count', 0))}</span>개 생성</p>
           <p class="muted">manifest: <code>{_escape(setup_guides.get('manifest_path'))}</code></p>
           <table><thead><tr><th>가이드</th><th>상태</th><th>파일</th></tr></thead><tbody>{guide_rows}</tbody></table>
+        </section>
+        """
+
+    handoff_report_html = ""
+    if handoff_report:
+        handoff_report_html = f"""
+        <section class="band">
+          <h2>handoff 보고서 생성 결과</h2>
+          <p>환경 <span class="status">{_escape(handoff_report.get('environment_status'))}</span> · 체크리스트 <span class="status">{_escape(handoff_report.get('checklist_status'))}</span></p>
+          <label>보고서</label>
+          <p><code>{_escape(handoff_report.get('report_path'))}</code></p>
+          <label>manifest</label>
+          <p><code>{_escape(handoff_report.get('manifest_path'))}</code></p>
         </section>
         """
 
@@ -870,6 +885,7 @@ def _render_page(
     {growth_import_html}
     {snapshot_html}
     {setup_guides_html}
+    {handoff_report_html}
 
     <section class="band">
       <h2>최근 저장 초안</h2>
@@ -891,6 +907,17 @@ def _render_page(
       <h2>새 PC에서 이어하기</h2>
       <p class="muted">GitHub 코드와 운영 스냅샷을 함께 사용하면 다른 PC에서도 같은 작업 상태로 복원할 수 있습니다.</p>
       {_restore_guide_html()}
+    </section>
+
+    <section class="band">
+      <h2>handoff 보고서</h2>
+      <p class="muted">환경 상태, 첫 실행 체크리스트, 최신 스냅샷, 설정 가이드 경로를 한 문서로 묶습니다.</p>
+      <form method="post" action="/handoff-report">
+        <div class="actions">
+          <button class="secondary" type="submit">handoff 보고서 생성</button>
+          <span class="muted">보고서는 data/handoff_reports 아래에 저장됩니다.</span>
+        </div>
+      </form>
     </section>
   </main>
 </body>
@@ -967,6 +994,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/setup-guides":
                 setup_guides = export_setup_guides()
                 self._send(_render_page(setup_guides=setup_guides))
+                return
+            if self.path == "/handoff-report":
+                handoff_report = create_handoff_report()
+                self._send(_render_page(handoff_report=handoff_report))
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]
