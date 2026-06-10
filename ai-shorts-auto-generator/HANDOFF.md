@@ -524,6 +524,23 @@ Next recommended work:
 
 - Add connector-specific readiness pages for Gemini generation, YouTube collection, Naver search, and Kakao API smoke checks without exposing keys.
 
+## 2026-06-10 API Connector Readiness Step
+
+Added API-specific readiness checks:
+
+- `src/ai_shorts/api_keys.py` now groups saved key status into Gemini, YouTube, Naver, and Kakao connector readiness.
+- The home page now shows `API별 연결 준비` with purpose, missing keys, and next-step text.
+- The readiness is local-only and does not run external network calls yet.
+
+Verification target:
+
+- Compile API key, web app, and tests.
+- Smoke-test missing/ready connector states without exposing raw keys.
+
+Next recommended work:
+
+- Add connector smoke-check routes that can run user-approved lightweight calls for each API and store only status metadata.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

@@ -17,6 +17,33 @@ API_KEY_FIELDS = [
     {"name": "kakao_rest_api_key", "label": "Kakao REST API 키"},
 ]
 
+API_CONNECTORS = [
+    {
+        "name": "gemini",
+        "label": "Gemini 생성",
+        "purpose": "대본, 장면 아이디어, 제목 후보 생성",
+        "required": ["gemini_api_key"],
+    },
+    {
+        "name": "youtube",
+        "label": "YouTube 수집",
+        "purpose": "YouTube Data API 기반 영상/채널/성과 수집 준비",
+        "required": ["youtube_api_key"],
+    },
+    {
+        "name": "naver",
+        "label": "Naver 검색",
+        "purpose": "Naver 검색 API 기반 트렌드/자료 조사 준비",
+        "required": ["naver_client_id", "naver_client_secret"],
+    },
+    {
+        "name": "kakao",
+        "label": "Kakao API",
+        "purpose": "Kakao REST API 기반 보조 연동 준비",
+        "required": ["kakao_rest_api_key"],
+    },
+]
+
 
 def save_api_keys(values: dict[str, str]) -> dict[str, Any]:
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,6 +80,27 @@ def api_key_status(payload: dict[str, Any] | None = None) -> list[dict[str, str]
 
 def configured_api_key_count() -> int:
     return sum(1 for item in api_key_status() if item["configured"] == "yes")
+
+
+def api_connector_readiness(payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    status_by_name = {item["name"]: item for item in api_key_status(payload)}
+    readiness = []
+    for connector in API_CONNECTORS:
+        required = connector["required"]
+        missing = [name for name in required if status_by_name.get(name, {}).get("configured") != "yes"]
+        readiness.append(
+            {
+                "name": connector["name"],
+                "label": connector["label"],
+                "purpose": connector["purpose"],
+                "status": "ready" if not missing else "missing_keys",
+                "required_keys": required,
+                "missing_keys": missing,
+                "network_check": "not_run",
+                "next_step": "연결 테스트를 실행할 준비가 됐습니다." if not missing else "필수 키를 먼저 저장하세요.",
+            }
+        )
+    return readiness
 
 
 def _mask_secret(value: str) -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import zipfile
 
-from ai_shorts.api_keys import api_key_status, save_api_keys
+from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
@@ -96,6 +96,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "생성된 보고서 보기" in html
     assert "제작 준비도" in html
     assert "API 키 준비" in html
+    assert "API별 연결 준비" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -324,6 +325,28 @@ def test_api_keys_save_and_mask_status(tmp_path, monkeypatch) -> None:
     assert len(result["updated"]) == 5
     assert all(item["configured"] == "yes" for item in status)
     assert all("secret-1234" not in item["masked"] for item in status)
+
+
+def test_api_connector_readiness_groups_required_keys(tmp_path, monkeypatch) -> None:
+    from ai_shorts import api_keys
+
+    monkeypatch.setattr(api_keys, "API_KEYS_PATH", tmp_path / "secrets" / "api_keys.json")
+    missing = api_connector_readiness()
+    assert {item["name"] for item in missing} == {"gemini", "youtube", "naver", "kakao"}
+    assert all(item["status"] == "missing_keys" for item in missing)
+
+    save_api_keys(
+        {
+            "gemini_api_key": "gemini-secret-1234",
+            "youtube_api_key": "youtube-secret-1234",
+            "naver_client_id": "naver-client-id",
+            "naver_client_secret": "naver-client-secret",
+            "kakao_rest_api_key": "kakao-secret-1234",
+        }
+    )
+    ready = api_connector_readiness()
+    assert all(item["status"] == "ready" for item in ready)
+    assert all(item["network_check"] == "not_run" for item in ready)
 
 
 def test_production_readiness_reports_api_and_growth_state(tmp_path, monkeypatch) -> None:

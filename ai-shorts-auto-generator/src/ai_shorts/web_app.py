@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .api_keys import API_KEY_FIELDS, api_key_status, save_api_keys
+from .api_keys import API_KEY_FIELDS, api_connector_readiness, api_key_status, save_api_keys
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
 from .handoff_report import create_handoff_report, list_handoff_reports, read_handoff_report
@@ -197,6 +197,26 @@ def _api_key_setup_html(api_result: dict | None = None) -> str:
         </div>
       </form>
       <table><thead><tr><th>키</th><th>상태</th><th>표시</th></tr></thead><tbody>{rows}</tbody></table>
+    </section>
+    """
+
+
+def _api_connector_readiness_html() -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('label'))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+        f"<td>{_escape(item.get('purpose'))}</td>"
+        f"<td><code>{_escape(', '.join(item.get('missing_keys', [])) or 'none')}</code></td>"
+        f"<td>{_escape(item.get('next_step'))}</td>"
+        "</tr>"
+        for item in api_connector_readiness()
+    )
+    return f"""
+    <section class="band">
+      <h2>API별 연결 준비</h2>
+      <p class="muted">현재 단계에서는 외부 네트워크 호출 없이 저장된 키 조합만 확인합니다. 실제 연결 테스트는 다음 단계에서 별도로 실행합니다.</p>
+      <table><thead><tr><th>API</th><th>상태</th><th>용도</th><th>부족한 키</th><th>다음 작업</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
     """
 
@@ -918,6 +938,7 @@ def _render_page(
     {_environment_check_html()}
     {_production_readiness_html()}
     {_api_key_setup_html(api_result)}
+    {_api_connector_readiness_html()}
     {_first_run_checklist_html()}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
