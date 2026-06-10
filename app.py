@@ -4266,6 +4266,21 @@ def result_detail_page(name: str, message: str = "") -> str:
             else "<a class='action-button' href='#pre-submission'>제출 전 패키지 확인</a>"
         )
     next_step_outputs_html = html_list(next_step_outputs, "새로 생성되거나 확인할 파일이 없습니다.")
+    workflow_file_links = [
+        ("수정 계획", output_dir / "review_action_plan.json"),
+        ("재생성 ZIP", output_dir / "action_regeneration" / "action_regeneration_submit_candidates.zip"),
+        ("재생성 리포트", output_dir / "action_regeneration" / "action_regeneration_report.json"),
+        ("최종 후보 ZIP", output_dir / "final_candidates" / "final_candidates_submit.zip"),
+        ("최종 검수 리포트", output_dir / "final_candidates" / "final_candidates_audit_report.json"),
+        ("제출 전 패키지", output_dir / "pre_submission_package" / "pre_submission_review_package.zip"),
+        ("패키지 요약", output_dir / "pre_submission_package" / "pre_submission_summary.html"),
+    ]
+    workflow_ready_links = " ".join(
+        link(label, path)
+        for label, path in workflow_file_links
+        if path.exists()
+    )
+    workflow_ready_links = workflow_ready_links or "<p>아직 바로 열 수 있는 단계 파일이 없습니다.</p>"
     direction_items = next_direction.get("directions", []) if isinstance(next_direction, dict) else []
     direction_html = html_list(
         [
@@ -4392,6 +4407,8 @@ def result_detail_page(name: str, message: str = "") -> str:
     .next-step-preview li {{ font-size:13px; }}
     .next-step-preview-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     .next-step-preview code {{ background:#fff3d8; padding:2px 6px; border-radius:8px; }}
+    .ready-files {{ margin-top:12px; padding-top:10px; border-top:1px solid #d8eee5; }}
+    .ready-files p {{ margin:6px 0 0; }}
     .audit-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:12px 0; }}
     .table-wrap {{ width:100%; overflow-x:auto; }}
     .audit-table {{ width:100%; border-collapse:separate; border-spacing:0; min-width:760px; }}
@@ -4474,6 +4491,10 @@ def result_detail_page(name: str, message: str = "") -> str:
         </div>
       </div>
       {next_step_control}
+      <div class="ready-files">
+        <strong>바로 열기</strong>
+        <p>{workflow_ready_links}</p>
+      </div>
     </div>
   </section>
   <section class="panel verdict {tone(readiness_label)}">
