@@ -3757,7 +3757,14 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
             else html.escape(str(row.get("next_action_label", "")))
         )
         stages = row.get("stages", {})
-        should_check = bool(isinstance(stages, dict) and not stages.get("review_action") and stage_filter == "needs_review")
+        should_check = False
+        if isinstance(stages, dict):
+            should_check = (
+                (stage_filter == "needs_review" and not stages.get("review_action"))
+                or (stage_filter == "needs_regen" and bool(stages.get("review_action")) and not stages.get("regenerated"))
+                or (stage_filter == "needs_final" and bool(stages.get("regenerated")) and not stages.get("final_candidates"))
+                or (stage_filter == "needs_package" and bool(stages.get("final_candidates")) and not stages.get("pre_submission"))
+            )
         row_html += f"""
         <tr>
           <td><input type="checkbox" name="names" value="{html.escape(str(row.get("name", "")))}" {'checked' if should_check else ''}></td>
@@ -3858,6 +3865,7 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
         <button type="submit" name="bulk_action" value="review">선택 항목 수정계획 생성</button>
         <button type="submit" name="bulk_action" value="regen">선택 항목 재생성 실행</button>
         <button type="submit" name="bulk_action" value="final">선택 항목 최종 후보 ZIP 생성</button>
+        <button type="submit" name="bulk_action" value="package">선택 항목 제출 전 패키지 생성</button>
         <small>이미 준비된 단계는 건너뜁니다. 최종 후보는 재생성본이 있는 컷만 재생성본을 우선 사용합니다.</small>
       </div>
       <table>
@@ -7707,7 +7715,16 @@ class Handler(BaseHTTPRequestHandler):
                 if output_dir is None:
                     missing += 1
                     continue
-                if action == "final":
+                if action == "package":
+                    if not (output_dir / "final_candidates" / "final_candidates_report.json").exists():
+                        blocked += 1
+                        continue
+                    if (output_dir / "pre_submission_package" / "pre_submission_manifest.json").exists():
+                        skipped += 1
+                        continue
+                    build_pre_submission_package(output_dir)
+                    created += 1
+                elif action == "final":
                     if not (output_dir / "action_regeneration" / "action_regeneration_report.json").exists():
                         blocked += 1
                         continue
@@ -7733,6 +7750,8 @@ class Handler(BaseHTTPRequestHandler):
                     created += 1
             if not form.get("names", []):
                 message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
+            elif action == "package":
+                message = f"일괄 제출 전 패키지 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 최종후보 없음 {blocked}개 / 찾을 수 없음 {missing}개"
             elif action == "final":
                 message = f"일괄 최종 후보 ZIP 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 재생성 없음 {blocked}개 / 찾을 수 없음 {missing}개"
             elif action == "regen":
