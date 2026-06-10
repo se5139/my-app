@@ -4128,6 +4128,7 @@ def load_bulk_action_reports(limit: int = 50) -> list[dict[str, object]]:
                 "query": payload.get("query", ""),
                 "counts": counts,
                 "json": json_path,
+                "file_name": json_path.name,
                 "html": html_path if html_path.exists() else None,
                 "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(json_path.stat().st_mtime)),
             }
@@ -4145,12 +4146,14 @@ def bulk_reports_page() -> str:
         if not isinstance(counts, dict):
             counts = {}
         json_path = Path(str(report.get("json", "")))
+        detail_href = f"/bulk-report?name={quote(str(report.get('file_name', '')))}"
         html_path_raw = report.get("html")
         html_path = Path(str(html_path_raw)) if html_path_raw else None
         json_href = "/" + str(json_path).replace("\\", "/") if json_path.exists() else ""
         html_href = "/" + str(html_path).replace("\\", "/") if html_path and html_path.exists() else ""
         links = "".join(
             [
+                f"<a href='{html.escape(detail_href)}'>상세/재실행</a>",
                 f"<a href='{html.escape(html_href)}'>HTML 열기</a>" if html_href else "",
                 f"<a href='{html.escape(json_href)}'>JSON 열기</a>" if json_href else "",
             ]
@@ -4195,6 +4198,136 @@ def bulk_reports_page() -> str:
   <section class="panel">
     <table>
       <thead><tr><th>작업</th><th>필터/검색</th><th>결과</th><th>저장 시각</th><th>파일</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>"""
+
+
+def safe_bulk_report_path(name: str) -> Path | None:
+    safe_name = Path(name).name
+    if not safe_name.endswith("_bulk_action_report.json"):
+        return None
+    candidate = OUTPUT_ROOT / "_bulk_actions" / safe_name
+    try:
+        report_root = (OUTPUT_ROOT / "_bulk_actions").resolve()
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if report_root == resolved or report_root in resolved.parents:
+        return candidate if candidate.exists() else None
+    return None
+
+
+def bulk_report_detail_page(name: str) -> str:
+    report_path = safe_bulk_report_path(name)
+    if report_path is None:
+        return page(error="일괄 작업 리포트를 찾을 수 없습니다.")
+    report = read_json_file(report_path, {})
+    if not isinstance(report, dict):
+        return page(error="일괄 작업 리포트를 읽을 수 없습니다.")
+    records_data = report.get("records", [])
+    records = records_data if isinstance(records_data, list) else []
+    action = str(report.get("action", "review"))
+    stage_filter = str(report.get("stage_filter", "all"))
+    query = str(report.get("query", ""))
+    counts = report.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    status_labels = {"created": "생성", "skipped": "건너뜀", "blocked": "막힘", "missing": "찾을 수 없음"}
+
+    def names_for(statuses: set[str]) -> list[str]:
+        return [
+            str(item.get("name", ""))
+            for item in records
+            if isinstance(item, dict) and str(item.get("name", "")) and str(item.get("status", "")) in statuses
+        ]
+
+    def rerun_form(label: str, statuses: set[str]) -> str:
+        selected = names_for(statuses)
+        hidden_names = "".join(f"<input type='hidden' name='names' value='{html.escape(name_value)}'>" for name_value in selected)
+        disabled = " disabled" if not selected else ""
+        return f"""
+        <form method="post" action="/bulk-review-action">
+          <input type="hidden" name="q" value="{html.escape(query)}">
+          <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+          <input type="hidden" name="bulk_action" value="{html.escape(action)}">
+          {hidden_names}
+          <button type="submit"{disabled}>{html.escape(label)} ({len(selected)}개)</button>
+        </form>
+        """
+
+    rows = ""
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status", ""))
+        name_value = str(item.get("name", ""))
+        detail_link = f"<a href='/result?name={quote(name_value)}'>결과 열기</a>" if safe_output_dir_by_name(name_value) else ""
+        rows += f"""
+        <tr>
+          <td><span class="badge {html.escape(status)}">{html.escape(status_labels.get(status, status))}</span></td>
+          <td>{html.escape(name_value)}<br>{detail_link}</td>
+          <td>{html.escape(str(item.get("reason", "")))}</td>
+          <td>{html.escape(str(item.get("output", "")))}</td>
+        </tr>
+        """
+    if not rows:
+        rows = "<tr><td colspan='4'>기록된 항목이 없습니다.</td></tr>"
+    summary = "".join(
+        f"<div class='metric'><span>{html.escape(label)}</span><strong>{html.escape(str(counts.get(key, 0)))}</strong></div>"
+        for key, label in status_labels.items()
+    )
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk Report Detail</title>
+  <style>
+    body {{ margin:0; color:#2d2424; font-family:"Malgun Gothic", sans-serif; background:linear-gradient(135deg,#fffaf0,#eef8ef); }}
+    main {{ width:min(1080px, calc(100% - 32px)); margin:0 auto; padding:42px 0; }}
+    .panel {{ border:2px solid #ead8bc; border-radius:28px; background:rgba(255,255,255,.9); padding:24px; box-shadow:0 18px 50px rgba(96,69,45,.11); margin-bottom:18px; }}
+    h1 {{ margin:0 0 10px; font-size:clamp(32px,5vw,54px); }}
+    p, td, th, small {{ line-height:1.6; color:#6f625f; }}
+    .summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }}
+    .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
+    .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
+    .actions {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+    table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
+    th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    th {{ color:#2d2424; background:#fff3d8; }}
+    .badge {{ display:inline-block; border-radius:999px; padding:5px 9px; font-weight:900; border:1px solid #d8ccbc; background:#f7f4ef; color:#5d534e; }}
+    .badge.created {{ background:#dff8eb; border-color:#83d7b6; color:#245d46; }}
+    .badge.blocked, .badge.missing {{ background:#fff0ea; border-color:#f0b29b; color:#8a412d; }}
+    a, button {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:8px 11px; cursor:pointer; }}
+    button:disabled {{ opacity:.55; cursor:not-allowed; }}
+    a.nav, button.primary {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>일괄 리포트 상세</h1>
+    <p><strong>{html.escape(str(report.get("action_label", bulk_action_label(action))))}</strong> / {html.escape(str(report.get("created_at", "")))}</p>
+    <p>상태별로 다시 일괄 확인 화면을 열 수 있습니다. 다시 실행 전 현재 파일 상태를 새로 판정합니다.</p>
+    <p><a class="nav" href="/bulk-reports">리포트 목록</a><a class="nav" href="/results">최근 결과물</a></p>
+    <div class="summary">{summary}</div>
+  </section>
+  <section class="panel">
+    <h2>다시 확인</h2>
+    <div class="actions">
+      {rerun_form("막힌 항목 다시 확인", {"blocked"})}
+      {rerun_form("누락 항목 다시 확인", {"missing"})}
+      {rerun_form("건너뜀 항목 다시 확인", {"skipped"})}
+      {rerun_form("전체 항목 다시 확인", {"created", "skipped", "blocked", "missing"})}
+    </div>
+  </section>
+  <section class="panel">
+    <table>
+      <thead><tr><th>상태</th><th>결과 폴더</th><th>사유</th><th>생성 파일</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </section>
@@ -8002,6 +8135,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/bulk-reports":
             self.respond(200, bulk_reports_page())
+            return
+        if parsed.path == "/bulk-report":
+            params = parse_qs(parsed.query)
+            self.respond(200, bulk_report_detail_page(params.get("name", [""])[0]))
             return
         if parsed.path == "/result":
             params = parse_qs(parsed.query)
