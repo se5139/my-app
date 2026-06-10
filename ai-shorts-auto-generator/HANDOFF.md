@@ -27,6 +27,21 @@ ai-shorts-auto-generator/
 
 As of 2026-06-09, Git was not available from PowerShell PATH in this Codex session. The GitHub connector can save UTF-8 text files to the remote repository, but normal local `git commit` and `git push` require Git to be installed or exposed in PATH.
 
+## 2026-06-10 Duration Selection And Timing Plan Step
+
+Added the first timing layer without replacing the existing script/render flow:
+
+- Script drafts now preserve `target_duration_sec` with 30/45/60 allowed and 45 seconds as the default.
+- New `src/ai_shorts/timing_plan.py` writes `renders/placeholder/timing_plan.json`.
+- Placeholder render plans now include `start_sec`, `end_sec`, `duration_sec`, `total_duration_sec`, and the timing plan path.
+- GIF preview manifests now use timing-plan scene durations instead of a fixed 1200 ms frame duration.
+- MP4 status now records the target duration and source timing plan path, while public upload and paid/API gates remain unchanged.
+- The web UI now lets users choose 30/45/60 seconds when creating or editing a draft and shows the timing plan in project detail.
+
+Next recommended work:
+
+- Generate SRT/VTT subtitles from `timing_plan.json` and add a subtitle validation gate before final render/export.
+
 ## 2026-06-10 Korean Beginner Docs And Dependency Step
 
 Cleaned up the beginner-facing setup surface without removing existing features:

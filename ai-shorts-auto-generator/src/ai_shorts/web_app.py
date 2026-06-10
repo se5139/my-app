@@ -41,6 +41,14 @@ def _escape(value: object) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
+def _duration_options(selected: object) -> str:
+    selected_value = str(selected or "45")
+    return "".join(
+        f'<option value="{duration}"{" selected" if str(duration) == selected_value else ""}>{duration}초</option>'
+        for duration in (30, 45, 60)
+    )
+
+
 def _app_state() -> dict:
     ensure_data_dirs()
     return read_json(APP_STATE_PATH, {"projects": [], "last_opened_project_id": None})
@@ -404,6 +412,7 @@ def _render_project_detail(project_id: str) -> str:
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
+    timing_plan = read_json(render_dir / "timing_plan.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_info = read_json(preview_dir / "mp4_status.json", {})
     ffmpeg_guide = read_json(preview_dir / "ffmpeg_setup_guide.json", {})
@@ -454,6 +463,7 @@ def _render_project_detail(project_id: str) -> str:
     review = project.get("review", {}) if isinstance(project, dict) else {}
     reviewer_note = review.get("reviewer_note", "") if isinstance(review, dict) else ""
     reviewed_at = review.get("reviewed_at", "") if isinstance(review, dict) else ""
+    target_duration_sec = script.get("target_duration_sec", 45) if isinstance(script, dict) else 45
     scene_inputs = "".join(
         f"""
         <label for="scene_caption_{idx}">장면 {idx + 1} 자막</label>
@@ -465,15 +475,19 @@ def _render_project_detail(project_id: str) -> str:
         "<tr>"
         f"<td>{int(scene.get('scene_no', idx + 1))}</td>"
         f"<td>{_escape(scene.get('caption'))}</td>"
+        f"<td>{_escape(scene.get('start_sec'))}s-{_escape(scene.get('end_sec'))}s</td>"
         f"<td>{_escape(scene.get('duration_sec'))}s</td>"
         f"<td><code>{_escape(scene.get('placeholder_svg'))}</code></td>"
         "</tr>"
         for idx, scene in enumerate(render_plan.get("scenes", []))
     )
     if not render_rows:
-        render_rows = '<tr><td colspan="4" class="muted">아직 렌더 placeholder가 없습니다.</td></tr>'
+        render_rows = '<tr><td colspan="5" class="muted">아직 렌더 placeholder가 없습니다.</td></tr>'
     timeline_html = render_plan.get("timeline_html", "") if isinstance(render_plan, dict) else ""
     render_manifest = render_plan.get("render_manifest", "") if isinstance(render_plan, dict) else ""
+    timing_plan_path = render_plan.get("timing_plan", "") if isinstance(render_plan, dict) else ""
+    timing_status = timing_plan.get("status", "not_created") if isinstance(timing_plan, dict) else "not_created"
+    timing_total_duration = timing_plan.get("total_duration_sec", "") if isinstance(timing_plan, dict) else ""
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -553,6 +567,8 @@ def _render_project_detail(project_id: str) -> str:
           <p>{_escape(script.get('hook'))}</p>
           <label>썸네일 문구</label>
           <p>{_escape(script.get('thumbnail_text'))}</p>
+          <label>목표 길이</label>
+          <p>{_escape(target_duration_sec)}초</p>
         </div>
         <div>
           <label>창작 변형 메모</label>
@@ -584,6 +600,8 @@ def _render_project_detail(project_id: str) -> str:
         <input id="edit_hook" name="hook" value="{_escape(script.get('hook'))}">
         <label for="edit_narration">전체 내레이션</label>
         <textarea id="edit_narration" name="narration">{_escape(script.get('narration'))}</textarea>
+        <label for="edit_target_duration_sec">목표 길이</label>
+        <select id="edit_target_duration_sec" name="target_duration_sec">{_duration_options(target_duration_sec)}</select>
         <div class="grid two">{scene_inputs}</div>
         <div class="actions">
           <button type="submit">수정 저장</button>
@@ -613,13 +631,17 @@ def _render_project_detail(project_id: str) -> str:
         <div>
           <label>타임라인 HTML</label>
           <p><code>{_escape(timeline_html or '아직 생성되지 않았습니다.')}</code></p>
+          <label>타이밍 계획</label>
+          <p><code>{_escape(timing_plan_path or '아직 생성되지 않았습니다.')}</code></p>
         </div>
         <div>
           <label>렌더 manifest</label>
           <p><code>{_escape(render_manifest or '아직 생성되지 않았습니다.')}</code></p>
+          <label>타이밍 상태</label>
+          <p>{_escape(timing_status)} · 총 {_escape(timing_total_duration or render_plan.get('total_duration_sec', ''))}초</p>
         </div>
       </div>
-      <table><thead><tr><th>#</th><th>자막</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
+      <table><thead><tr><th>#</th><th>자막</th><th>구간</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
     </section>
 
     <section class="band">
@@ -919,7 +941,7 @@ def _render_page(
     .grid {{ display: grid; gap: 14px; }}
     .two {{ grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }}
     label {{ display: block; font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 7px; }}
-    input, textarea {{
+    input, textarea, select {{
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -1006,6 +1028,10 @@ def _render_page(
           <div>
             <label for="source_notes">참고/수집 메모</label>
             <input id="source_notes" name="source_notes" placeholder="복제하지 않고 주제 흐름만 참고">
+          </div>
+          <div>
+            <label for="target_duration_sec">목표 길이</label>
+            <select id="target_duration_sec" name="target_duration_sec">{_duration_options(45)}</select>
           </div>
         </div>
         <div class="actions">
@@ -1161,7 +1187,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/create":
                 topic = params.get("topic", [""])[0]
                 source_notes = params.get("source_notes", [""])[0]
-                result = create_draft_package(topic, source_notes)
+                target_duration_sec = int(params.get("target_duration_sec", ["45"])[0] or 45)
+                result = create_draft_package(topic, source_notes, target_duration_sec)
                 self._send(_render_page(result=result))
                 return
             if self.path == "/plan":
@@ -1246,6 +1273,7 @@ class Handler(BaseHTTPRequestHandler):
                         "hook": params.get("hook", [""])[0],
                         "thumbnail_text": params.get("thumbnail_text", [""])[0],
                         "narration": params.get("narration", [""])[0],
+                        "target_duration_sec": params.get("target_duration_sec", ["45"])[0],
                         "scene_captions": scene_captions,
                     },
                 )

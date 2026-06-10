@@ -117,27 +117,35 @@ def test_update_project_review_missing_project_raises() -> None:
 
 
 def test_script_draft_round_trips_from_dict() -> None:
-    draft = create_local_script_draft("대본 수정 테스트", "주제만 참고")
+    draft = create_local_script_draft("대본 수정 테스트", "주제만 참고", target_duration_sec=60)
     loaded = script_draft_from_dict(draft.to_dict())
     assert loaded.title == draft.title
     assert loaded.scenes[0].caption == draft.scenes[0].caption
+    assert loaded.target_duration_sec == 60
+    assert script_draft_from_dict({"scenes": []}).target_duration_sec == 45
 
 
 def test_render_placeholder_plan_shape(tmp_path) -> None:
-    draft = create_local_script_draft("렌더 테스트", "주제만 참고")
+    draft = create_local_script_draft("렌더 테스트", "주제만 참고", target_duration_sec=30)
     plan = create_render_placeholders("p1", draft, tmp_path)
     assert plan["status"] == "placeholder_ready"
+    assert plan["target_duration_sec"] == 30
+    assert plan["total_duration_sec"] == 30
     assert plan["scene_count"] == len(draft.scenes)
     assert (tmp_path / "renders" / "placeholder" / "render_plan.json").exists()
     assert (tmp_path / "renders" / "placeholder" / "render_manifest.json").exists()
+    assert (tmp_path / "renders" / "placeholder" / "timing_plan.json").exists()
     assert (tmp_path / "renders" / "placeholder" / "timeline.html").exists()
+    assert sum(scene["duration_sec"] for scene in plan["scenes"]) == 30
 
 
 def test_preview_media_creates_gif_and_manifest(tmp_path) -> None:
-    draft = create_local_script_draft("미리보기 테스트", "주제만 참고")
+    draft = create_local_script_draft("미리보기 테스트", "주제만 참고", target_duration_sec=60)
     create_render_placeholders("p1", draft, tmp_path)
     manifest = create_preview_media("p1", tmp_path)
     assert manifest["status"] == "preview_ready"
+    assert manifest["target_duration_sec"] == 60
+    assert sum(frame["duration_ms"] for frame in manifest["frames"]) == 60000
     assert (tmp_path / "renders" / "preview" / "preview.gif").exists()
     assert (tmp_path / "renders" / "preview" / "preview_manifest.json").exists()
 

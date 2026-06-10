@@ -68,6 +68,7 @@ def ffmpeg_setup_guide(project_dir: Path) -> dict[str, Any]:
 
 def mp4_status(project_dir: Path) -> dict[str, Any]:
     preview_dir = project_dir / "renders" / "preview"
+    preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     ffmpeg_path = find_ffmpeg()
     status = {
         "ffmpeg_available": bool(ffmpeg_path),
@@ -76,6 +77,8 @@ def mp4_status(project_dir: Path) -> dict[str, Any]:
         "status": "ready" if ffmpeg_path else "ffmpeg_missing",
         "install_hint": "Install ffmpeg and make sure ffmpeg.exe is available in PATH.",
         "setup_guide_path": str(preview_dir / "ffmpeg_setup_guide.json"),
+        "target_duration_sec": preview_manifest.get("target_duration_sec", 0),
+        "source_timing_plan": preview_manifest.get("source_timing_plan", ""),
     }
     if not ffmpeg_path:
         ffmpeg_setup_guide(project_dir)
@@ -118,6 +121,8 @@ def render_mp4_from_preview(project_id: str, project_dir: Path) -> dict[str, Any
             "mp4_path": str(output_path),
             "status": "failed",
             "stderr": completed.stderr[-2000:],
+            "target_duration_sec": preview_manifest.get("target_duration_sec", 0),
+            "source_timing_plan": preview_manifest.get("source_timing_plan", ""),
         }
         write_json(preview_dir / "mp4_status.json", status)
         return status
@@ -129,6 +134,8 @@ def render_mp4_from_preview(project_id: str, project_dir: Path) -> dict[str, Any
         "mp4_path": str(output_path),
         "status": "mp4_ready",
         "source_manifest": str(preview_dir / "preview_manifest.json"),
+        "target_duration_sec": preview_manifest.get("target_duration_sec", 0),
+        "source_timing_plan": preview_manifest.get("source_timing_plan", ""),
     }
     write_json(preview_dir / "mp4_status.json", status)
     return status

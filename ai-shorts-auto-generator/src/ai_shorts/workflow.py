@@ -9,15 +9,15 @@ from .paths import PROJECTS_DIR, ensure_data_dirs
 from .render_export import build_render_export_status
 from .render_placeholder import create_render_placeholders
 from .render_preview import create_preview_media
-from .script_lab import create_local_script_draft, script_draft_from_dict
+from .script_lab import create_local_script_draft, normalize_target_duration, script_draft_from_dict
 from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
 from .upload_checklist import build_final_upload_checklist
 
 
-def create_draft_package(topic: str, source_notes: str = "") -> dict[str, Any]:
+def create_draft_package(topic: str, source_notes: str = "", target_duration_sec: int = 45) -> dict[str, Any]:
     ensure_data_dirs()
     project = create_project(topic, source_notes)
-    script = create_local_script_draft(topic, source_notes)
+    script = create_local_script_draft(topic, source_notes, normalize_target_duration(target_duration_sec))
     project_dir = PROJECTS_DIR / project.id
     write_json(project_dir / "script_draft.json", script.to_dict())
     export = export_manual_upload_package(project, script)
@@ -39,6 +39,7 @@ def update_draft_script(project_id: str, updates: dict[str, Any]) -> dict[str, A
     script.hook = str(updates.get("hook", script.hook)).strip() or script.hook
     script.thumbnail_text = str(updates.get("thumbnail_text", script.thumbnail_text)).strip() or script.thumbnail_text
     script.narration = str(updates.get("narration", script.narration)).strip() or script.narration
+    script.target_duration_sec = normalize_target_duration(updates.get("target_duration_sec", script.target_duration_sec))
 
     scene_captions = updates.get("scene_captions", [])
     for idx, caption in enumerate(scene_captions):

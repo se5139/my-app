@@ -5,6 +5,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+ALLOWED_TARGET_DURATIONS = (30, 45, 60)
+DEFAULT_TARGET_DURATION_SEC = 45
+
+
 @dataclass
 class SceneDraft:
     order: int
@@ -22,6 +26,7 @@ class ScriptDraft:
     scenes: list[SceneDraft]
     thumbnail_text: str
     description: str
+    target_duration_sec: int = DEFAULT_TARGET_DURATION_SEC
     tags: list[str] = field(default_factory=list)
     pinned_comment: str = ""
     transformation_note: str = ""
@@ -51,6 +56,7 @@ def script_draft_from_dict(data: dict[str, Any]) -> ScriptDraft:
         scenes=scenes,
         thumbnail_text=str(data.get("thumbnail_text", "")),
         description=str(data.get("description", "")),
+        target_duration_sec=normalize_target_duration(data.get("target_duration_sec", DEFAULT_TARGET_DURATION_SEC)),
         tags=[str(tag) for tag in data.get("tags", [])],
         pinned_comment=str(data.get("pinned_comment", "")),
         transformation_note=str(data.get("transformation_note", "")),
@@ -62,8 +68,19 @@ def _clean_topic(topic: str) -> str:
     return cleaned or "생활에 도움 되는 쇼츠"
 
 
-def create_local_script_draft(topic: str, source_notes: str = "") -> ScriptDraft:
+def normalize_target_duration(value: object) -> int:
+    try:
+        duration = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_TARGET_DURATION_SEC
+    if duration in ALLOWED_TARGET_DURATIONS:
+        return duration
+    return DEFAULT_TARGET_DURATION_SEC
+
+
+def create_local_script_draft(topic: str, source_notes: str = "", target_duration_sec: int = DEFAULT_TARGET_DURATION_SEC) -> ScriptDraft:
     clean_topic = _clean_topic(topic)
+    target_duration_sec = normalize_target_duration(target_duration_sec)
     title = f"{clean_topic}: 바로 써먹는 3가지 포인트"
     hook = f"{clean_topic}, 대부분 여기서 놓칩니다."
     scenes = [
@@ -109,6 +126,7 @@ def create_local_script_draft(topic: str, source_notes: str = "") -> ScriptDraft
             f"{clean_topic}에 대해 직접 구성한 쇼츠 초안입니다.\n\n"
             "이 영상은 참고 콘텐츠를 재업로드하거나 편집 모음으로 사용하지 않고, 새 대본과 새 장면으로 제작하는 것을 목표로 합니다."
         ),
+        target_duration_sec=target_duration_sec,
         tags=["쇼츠", "생활팁", "자기관리", "Shorts"],
         pinned_comment="이 주제에서 가장 먼저 바꿔보고 싶은 습관은 무엇인가요?",
         transformation_note=transformation_note,

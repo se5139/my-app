@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape
 
 from .script_lab import ScriptDraft
 from .state import write_json
+from .timing_plan import build_timing_plan
 
 
 WIDTH = 1080
@@ -67,7 +68,7 @@ def _timeline_html(render_plan: dict[str, Any]) -> str:
                 <img src="{escape(svg_path.name)}" alt="Scene {int(scene.get('scene_no', 0))} placeholder">
               </div>
               <div class="meta">
-                <div class="eyebrow">Scene {int(scene.get('scene_no', 0))} · {escape(str(scene.get('duration_sec', '')))}s</div>
+                <div class="eyebrow">Scene {int(scene.get('scene_no', 0))} · {escape(str(scene.get('start_sec', '')))}s-{escape(str(scene.get('end_sec', '')))}s · {escape(str(scene.get('duration_sec', '')))}s</div>
                 <h2>{escape(str(scene.get('caption', '')))}</h2>
                 <p>{escape(str(scene.get('visual_direction', '')))}</p>
               </div>
@@ -145,17 +146,21 @@ def create_render_placeholders(project_id: str, script: ScriptDraft, project_dir
     render_dir.mkdir(parents=True, exist_ok=True)
     scenes = script.to_dict().get("scenes", [])
     total = max(1, len(scenes))
-    duration_per_scene = round(45 / total, 2)
+    timing_plan = build_timing_plan(project_id, script, project_dir, render_dir / "render_plan.json")
+    timing_by_scene = {int(scene["scene_no"]): scene for scene in timing_plan.get("scenes", [])}
 
     scene_outputs: list[dict[str, Any]] = []
     for idx, scene in enumerate(scenes, start=1):
+        timing = timing_by_scene.get(idx, {})
         svg_path = render_dir / f"scene_{idx:02d}.svg"
         svg_path.write_text(_scene_svg(scene, script.title, idx, total), encoding="utf-8")
         scene_outputs.append(
             {
                 "scene_no": idx,
                 "caption": scene.get("caption", ""),
-                "duration_sec": duration_per_scene,
+                "start_sec": timing.get("start_sec", 0),
+                "end_sec": timing.get("end_sec", 0),
+                "duration_sec": timing.get("duration_sec", 0),
                 "placeholder_svg": str(svg_path),
                 "visual_direction": scene.get("visual_direction", ""),
             }
@@ -166,10 +171,12 @@ def create_render_placeholders(project_id: str, script: ScriptDraft, project_dir
         "title": script.title,
         "width": WIDTH,
         "height": HEIGHT,
-        "target_duration_sec": 45,
+        "target_duration_sec": timing_plan["target_duration_sec"],
+        "total_duration_sec": timing_plan["total_duration_sec"],
         "scene_count": len(scene_outputs),
         "status": "placeholder_ready",
         "scenes": scene_outputs,
+        "timing_plan": str(render_dir / "timing_plan.json"),
         "timeline_html": str(render_dir / "timeline.html"),
         "render_manifest": str(render_dir / "render_manifest.json"),
         "next_step": "Replace SVG placeholders with generated/attached images, then render MP4.",
@@ -182,6 +189,7 @@ def create_render_placeholders(project_id: str, script: ScriptDraft, project_dir
             "title": script.title,
             "review_entry": str(render_dir / "timeline.html"),
             "render_plan": str(render_dir / "render_plan.json"),
+            "timing_plan": str(render_dir / "timing_plan.json"),
             "assets": [scene["placeholder_svg"] for scene in scene_outputs],
             "status": "review_package_ready",
         },

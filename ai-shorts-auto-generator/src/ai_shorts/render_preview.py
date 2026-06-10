@@ -74,15 +74,24 @@ def create_preview_media(project_id: str, project_dir: Path) -> dict[str, Any]:
     outputs: list[dict[str, Any]] = []
 
     for idx, scene in enumerate(scenes, start=1):
+        duration_sec = float(scene.get("duration_sec", 1.2) or 1.2)
+        duration_ms = max(100, int(round(duration_sec * 1000)))
         frame = _scene_frame(scene, title, idx, total)
         frame_path = preview_dir / f"frame_{idx:02d}.png"
         frame.save(frame_path)
         frames.append(frame)
-        outputs.append({"scene_no": idx, "frame_png": str(frame_path), "duration_ms": 1200})
+        outputs.append(
+            {
+                "scene_no": idx,
+                "frame_png": str(frame_path),
+                "duration_sec": duration_sec,
+                "duration_ms": duration_ms,
+            }
+        )
 
     gif_path = preview_dir / "preview.gif"
     if frames:
-        frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=1200, loop=0)
+        frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=[frame["duration_ms"] for frame in outputs], loop=0)
 
     manifest = {
         "project_id": project_id,
@@ -90,6 +99,9 @@ def create_preview_media(project_id: str, project_dir: Path) -> dict[str, Any]:
         "format": "gif_preview",
         "width": WIDTH,
         "height": HEIGHT,
+        "target_duration_sec": render_plan.get("target_duration_sec", 0),
+        "total_duration_sec": render_plan.get("total_duration_sec", render_plan.get("target_duration_sec", 0)),
+        "source_timing_plan": render_plan.get("timing_plan", ""),
         "preview_gif": str(gif_path),
         "frames": outputs,
         "mp4_status": "not_available_without_ffmpeg",
