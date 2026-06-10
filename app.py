@@ -4221,7 +4221,7 @@ def safe_bulk_report_path(name: str) -> Path | None:
     return None
 
 
-def bulk_report_detail_page(name: str) -> str:
+def bulk_report_detail_page(name: str, status_filter: str = "all") -> str:
     report_path = safe_bulk_report_path(name)
     if report_path is None:
         return page(error="일괄 작업 리포트를 찾을 수 없습니다.")
@@ -4237,6 +4237,7 @@ def bulk_report_detail_page(name: str) -> str:
     if not isinstance(counts, dict):
         counts = {}
     status_labels = {"created": "생성", "skipped": "건너뜀", "blocked": "막힘", "missing": "찾을 수 없음"}
+    status_filter = status_filter if status_filter in {"all", *status_labels.keys()} else "all"
 
     def names_for(statuses: set[str]) -> list[str]:
         return [
@@ -4302,8 +4303,13 @@ def bulk_report_detail_page(name: str) -> str:
             """
         return forms
 
+    visible_records = [
+        item
+        for item in records
+        if isinstance(item, dict) and (status_filter == "all" or str(item.get("status", "")) == status_filter)
+    ]
     rows = ""
-    for item in records:
+    for item in visible_records:
         if not isinstance(item, dict):
             continue
         status = str(item.get("status", ""))
@@ -4323,6 +4329,14 @@ def bulk_report_detail_page(name: str) -> str:
         f"<div class='metric'><span>{html.escape(label)}</span><strong>{html.escape(str(counts.get(key, 0)))}</strong></div>"
         for key, label in status_labels.items()
     )
+    filter_counts = {
+        "all": len([item for item in records if isinstance(item, dict)]),
+        **{key: sum(1 for item in records if isinstance(item, dict) and str(item.get("status", "")) == key) for key in status_labels},
+    }
+    filter_links = "".join(
+        f"<a class='filter {'active' if key == status_filter else ''}' href='/bulk-report?name={quote(report_path.name)}&status={html.escape(key)}'>{html.escape(label)} <strong>{filter_counts.get(key, 0)}</strong></a>"
+        for key, label in [("all", "전체"), *status_labels.items()]
+    )
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -4339,6 +4353,7 @@ def bulk_report_detail_page(name: str) -> str:
     .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
     .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
     .actions {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+    .filter-row {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }}
     table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
     th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
     th {{ color:#2d2424; background:#fff3d8; }}
@@ -4348,6 +4363,8 @@ def bulk_report_detail_page(name: str) -> str:
     a, button {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:8px 11px; cursor:pointer; }}
     button:disabled {{ opacity:.55; cursor:not-allowed; }}
     a.nav, button.primary {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+    a.filter.active {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+    a.filter strong {{ display:inline-block; margin-left:4px; padding:1px 6px; border-radius:999px; background:rgba(255,255,255,.72); }}
   </style>
 </head>
 <body>
@@ -4374,6 +4391,11 @@ def bulk_report_detail_page(name: str) -> str:
     <div class="actions">
       {blocked_resolution_forms()}
     </div>
+  </section>
+  <section class="panel">
+    <h2>항목 필터</h2>
+    <div class="filter-row">{filter_links}</div>
+    <p>현재 표시 {len(visible_records)}개 / 전체 {filter_counts.get('all', 0)}개</p>
   </section>
   <section class="panel">
     <table>
@@ -8188,7 +8210,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/bulk-report":
             params = parse_qs(parsed.query)
-            self.respond(200, bulk_report_detail_page(params.get("name", [""])[0]))
+            self.respond(200, bulk_report_detail_page(params.get("name", [""])[0], params.get("status", ["all"])[0]))
             return
         if parsed.path == "/result":
             params = parse_qs(parsed.query)
