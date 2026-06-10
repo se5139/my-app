@@ -369,6 +369,23 @@ Next recommended work:
 
 - Add an operations snapshot/export button so the whole local project state can be backed up as a handoff bundle.
 
+## 2026-06-10 Operations Snapshot Export Step
+
+Added operations snapshot export:
+
+- `src/ai_shorts/operations_snapshot.py` creates JSON, Markdown, and ZIP handoff files under `data/snapshots`.
+- The snapshot summarizes saved projects, blocking gates, next actions, included files, and restore guidance.
+- The home page now includes an `운영 스냅샷 생성` action and shows the generated ZIP/Markdown paths.
+
+Verification target:
+
+- Compile operations snapshot, web, and tests.
+- End-to-end create a snapshot from the web action and verify the ZIP and handoff files exist.
+
+Next recommended work:
+
+- Add snapshot restore guidance UI and a one-page "new PC start here" document.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

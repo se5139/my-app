@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
+from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
@@ -444,6 +445,7 @@ def _render_page(
     result: dict | None = None,
     plan: dict | None = None,
     growth_import: dict | None = None,
+    snapshot: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -520,6 +522,19 @@ def _render_page(
           <p>성공 <span class="status">{int(growth_import.get('imported_count', 0))}</span> · 스킵 {int(growth_import.get('skipped_count', 0))}</p>
           <label>스킵된 행</label>
           <ol class="scenes">{skipped_rows}</ol>
+        </section>
+        """
+
+    snapshot_html = ""
+    if snapshot:
+        snapshot_html = f"""
+        <section class="band">
+          <h2>운영 스냅샷 생성 결과</h2>
+          <p>프로젝트 <span class="status">{int(snapshot.get('project_count', 0))}</span>개 · 포함 파일 {len(snapshot.get('included_files', []))}개</p>
+          <label>ZIP 번들</label>
+          <p><code>{_escape(snapshot.get('zip_path'))}</code></p>
+          <label>handoff 문서</label>
+          <p><code>{_escape(snapshot.get('readme_path'))}</code></p>
         </section>
         """
 
@@ -726,10 +741,22 @@ def _render_page(
     {result_html}
     {plan_html}
     {growth_import_html}
+    {snapshot_html}
 
     <section class="band">
       <h2>최근 저장 초안</h2>
       {_latest_project_summary()}
+    </section>
+
+    <section class="band">
+      <h2>운영 스냅샷</h2>
+      <p class="muted">현재 data 상태를 zip과 handoff 문서로 묶어 다른 PC에서 이어받기 쉽게 만듭니다.</p>
+      <form method="post" action="/operations-snapshot">
+        <div class="actions">
+          <button type="submit">운영 스냅샷 생성</button>
+          <span class="muted">스냅샷은 data/snapshots 아래에 저장됩니다.</span>
+        </div>
+      </form>
     </section>
   </main>
 </body>
@@ -790,6 +817,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/growth-csv-import":
                 growth_import = import_performance_csv(params.get("csv_text", [""])[0])
                 self._send(_render_page(growth_import=growth_import))
+                return
+            if self.path == "/operations-snapshot":
+                snapshot = create_operations_snapshot()
+                self._send(_render_page(snapshot=snapshot))
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]

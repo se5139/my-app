@@ -11,6 +11,7 @@ from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
+from ai_shorts.operations_snapshot import create_operations_snapshot
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
@@ -232,3 +233,22 @@ def test_web_app_renders_growth_import_result() -> None:
     html = _render_page(growth_import={"imported_count": 2, "skipped_count": 1, "skipped": [{"row": 4, "reason": "missing_title"}]}).decode("utf-8")
     assert "CSV 가져오기 결과" in html
     assert "missing_title" in html
+
+
+def test_operations_snapshot_creates_zip(tmp_path, monkeypatch) -> None:
+    from ai_shorts import operations_snapshot, paths
+
+    data_dir = tmp_path / "data"
+    projects_dir = data_dir / "projects"
+    monkeypatch.setattr(paths, "DATA_DIR", data_dir)
+    monkeypatch.setattr(paths, "PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(operations_snapshot, "DATA_DIR", data_dir)
+    monkeypatch.setattr(operations_snapshot, "PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(operations_snapshot, "SNAPSHOT_DIR", data_dir / "snapshots")
+    write_json(data_dir / "app_state.json", {"projects": [{"id": "p1", "title": "Snapshot Test", "status": "idea"}]})
+    write_json(projects_dir / "p1" / "project.json", {"status": "idea", "review": {"status": "needs_review"}})
+
+    snapshot = create_operations_snapshot()
+    assert snapshot["project_count"] == 1
+    assert snapshot["zip_path"].endswith(".zip")
+    assert (data_dir / "snapshots").exists()

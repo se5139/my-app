@@ -118,6 +118,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - growth learning score boosts for weekly plans when candidate topics match prior performance records
 - YouTube Studio style CSV paste import for bulk growth-learning performance records
 - CSV import result feedback with imported and skipped row counts
+- operations snapshot export that bundles local `data` state into a handoff zip and markdown summary
 
 ## Local Git Setup For This PC
 
