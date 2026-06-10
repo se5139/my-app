@@ -20,6 +20,7 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
     audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
     audio_mix_status = read_json(audio_dir / "audio_mix_status.json", {})
+    subtitle_burn_status = read_json(final_dir / "subtitle_burn_status.json", {})
 
     copied: dict[str, str] = {}
     missing: list[str] = []
@@ -38,6 +39,12 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
             copied["mixed_audio"] = _copy(mixed_audio_path, media_dir / "audio" / "mixed_audio.m4a")
     else:
         missing.append("audio_mix_ready")
+
+    subtitle_mode = "sidecar"
+    burned_video_path = Path(str(subtitle_burn_status.get("burned_video_path") or final_dir / "final_burned_subtitles.mp4"))
+    if subtitle_burn_status.get("status") == "subtitle_burn_ready" and burned_video_path.exists():
+        copied["burned_final_mp4"] = _copy(burned_video_path, media_dir / "final_burned_subtitles.mp4")
+        subtitle_mode = "burned_with_sidecar_fallback"
 
     for key, filename in [("srt", "subtitles.srt"), ("vtt", "subtitles.vtt")]:
         source = Path(str(subtitle_manifest.get(f"{key}_path") or subtitle_dir / filename))
@@ -69,8 +76,9 @@ def build_final_media_package(project_dir: Path) -> dict[str, Any]:
             "subtitle_manifest": str(subtitle_dir / "subtitle_manifest.json") if subtitle_manifest else "",
             "audio_manifest": str(audio_dir / "audio_manifest.json") if audio_manifest else "",
             "audio_mix_status": str(audio_dir / "audio_mix_status.json") if audio_mix_status else "",
+            "subtitle_burn_status": str(final_dir / "subtitle_burn_status.json") if subtitle_burn_status else "",
         },
-        "subtitle_mode": "sidecar",
+        "subtitle_mode": subtitle_mode,
         "next_step": _next_step(status),
     }
     write_json(package_dir / "final_media_package.json", manifest)
@@ -97,5 +105,5 @@ def _copy_audio_track(track: Any, audio_package_dir: Path, copied: dict[str, str
 
 def _next_step(status: str) -> str:
     if status == "final_media_ready":
-        return "수동 업로드 전 final_preview.mp4와 SRT/VTT sidecar 자막을 사람이 최종 확인하세요."
+        return "수동 업로드 전 final_preview.mp4, 선택 번인본, SRT/VTT sidecar 자막을 사람이 최종 확인하세요."
     return "최종 미디어 패키지를 만들기 전에 MP4 렌더, SRT/VTT 자막, 로컬 오디오 게이트, 오디오 믹싱을 완료하세요."

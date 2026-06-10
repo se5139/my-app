@@ -23,6 +23,7 @@ from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status, render_mp4_from_preview
 from ai_shorts.final_media_package import build_final_media_package
+from ai_shorts.subtitle_burner import burn_subtitles_into_final_video
 from ai_shorts.subtitle_export import create_subtitle_files
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
@@ -293,6 +294,37 @@ def test_audio_mixer_creates_mixed_audio_and_final_video(tmp_path, monkeypatch) 
     assert status["no_paid_api_calls"] is True
 
 
+def test_subtitle_burner_creates_burned_final_video(tmp_path, monkeypatch) -> None:
+    from ai_shorts import subtitle_burner
+
+    final_dir = tmp_path / "renders" / "final"
+    subtitle_dir = tmp_path / "renders" / "subtitles"
+    audio_dir = tmp_path / "renders" / "audio"
+    final_dir.mkdir(parents=True)
+    subtitle_dir.mkdir(parents=True)
+    audio_dir.mkdir(parents=True)
+    final_video = final_dir / "final_preview.mp4"
+    subtitle_path = subtitle_dir / "subtitles.srt"
+    final_video.write_bytes(b"mp4")
+    subtitle_path.write_text("1\n00:00:00,000 --> 00:00:01,000\n테스트\n", encoding="utf-8")
+    write_json(audio_dir / "audio_mix_status.json", {"status": "final_video_ready", "final_video_path": str(final_video)})
+    write_json(subtitle_dir / "subtitle_manifest.json", {"status": "subtitles_ready", "srt_path": str(subtitle_path)})
+
+    def fake_run(command, capture_output, text, timeout):
+        output_path = tmp_path / "renders" / "final" / "final_burned_subtitles.mp4"
+        output_path.write_bytes(b"burned")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subtitle_burner, "find_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(subtitle_burner.subprocess, "run", fake_run)
+
+    status = burn_subtitles_into_final_video("p1", tmp_path)
+
+    assert status["status"] == "subtitle_burn_ready"
+    assert status["subtitle_mode"] == "burned"
+    assert (final_dir / "final_burned_subtitles.mp4").exists()
+
+
 def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     package_dir = tmp_path / "exports" / "manual_upload_package"
     preview_dir = tmp_path / "renders" / "preview"
@@ -320,9 +352,15 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     mixed_audio.write_bytes(b"audio")
     final_video.parent.mkdir(parents=True)
     final_video.write_bytes(b"mp4")
+    burned_video = tmp_path / "renders" / "final" / "final_burned_subtitles.mp4"
+    burned_video.write_bytes(b"burned")
     write_json(
         tmp_path / "renders" / "audio" / "audio_mix_status.json",
         {"status": "final_video_ready", "mixed_audio_path": str(mixed_audio), "final_video_path": str(final_video)},
+    )
+    write_json(
+        tmp_path / "renders" / "final" / "subtitle_burn_status.json",
+        {"status": "subtitle_burn_ready", "burned_video_path": str(burned_video)},
     )
 
     manifest = build_final_media_package(tmp_path)
@@ -330,11 +368,12 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     assert manifest["status"] == "final_media_ready"
     assert (package_dir / "media" / "preview_silent.mp4").exists()
     assert (package_dir / "media" / "final_preview.mp4").exists()
+    assert (package_dir / "media" / "final_burned_subtitles.mp4").exists()
     assert (package_dir / "media" / "subtitles.srt").exists()
     assert (package_dir / "media" / "subtitles.vtt").exists()
     assert (package_dir / "media" / "audio" / "audio_manifest.json").exists()
     assert (package_dir / "media" / "audio" / "mixed_audio.m4a").exists()
-    assert manifest["subtitle_mode"] == "sidecar"
+    assert manifest["subtitle_mode"] == "burned_with_sidecar_fallback"
 
 
 def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:

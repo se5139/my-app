@@ -23,6 +23,7 @@ from .weekly_planner import TopicInsight, create_weekly_plan
 from .weekly_queue import mark_slot_promoted, save_weekly_plan_queue
 from .workflow import (
     check_or_render_mp4,
+    burn_subtitles_for_video,
     create_draft_package,
     create_ffmpeg_setup_guide,
     generate_placeholder_render,
@@ -417,6 +418,7 @@ def _render_project_detail(project_id: str) -> str:
     render_export_status = read_json(package_dir / "render_export_status.json", {})
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
+    subtitle_burn_status = read_json(PROJECTS_DIR / project_id / "renders" / "final" / "subtitle_burn_status.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     timing_plan = read_json(render_dir / "timing_plan.json", {})
@@ -516,6 +518,9 @@ def _render_project_detail(project_id: str) -> str:
     mixed_audio_path = audio_mix_status.get("mixed_audio_path", "") if isinstance(audio_mix_status, dict) else ""
     final_video_path = audio_mix_status.get("final_video_path", "") if isinstance(audio_mix_status, dict) else ""
     audio_mix_next_step = audio_mix_status.get("next_step", "MP4와 오디오 게이트 통과 후 합성하세요.") if isinstance(audio_mix_status, dict) else "MP4와 오디오 게이트 통과 후 합성하세요."
+    subtitle_burn_state = subtitle_burn_status.get("status", "not_created") if isinstance(subtitle_burn_status, dict) else "not_created"
+    burned_video_path = subtitle_burn_status.get("burned_video_path", "") if isinstance(subtitle_burn_status, dict) else ""
+    subtitle_burn_next_step = subtitle_burn_status.get("next_step", "원하면 final_preview.mp4에 SRT 자막을 직접 입히세요.") if isinstance(subtitle_burn_status, dict) else "원하면 final_preview.mp4에 SRT 자막을 직접 입히세요."
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -562,7 +567,8 @@ def _render_project_detail(project_id: str) -> str:
     final_media_missing = final_media_package.get("missing", []) if isinstance(final_media_package, dict) else []
     final_media_missing_text = ", ".join(str(item) for item in final_media_missing) if final_media_missing else "없음"
     final_media_next_step = final_media_package.get("next_step", "MP4와 SRT/VTT 자막을 만든 뒤 수동 업로드 미디어 패키지를 생성하세요.") if isinstance(final_media_package, dict) else "MP4와 SRT/VTT 자막을 만든 뒤 수동 업로드 미디어 패키지를 생성하세요."
-    final_media_mp4 = final_media_copied.get("mp4", "") if isinstance(final_media_copied, dict) else ""
+    final_media_mp4 = final_media_copied.get("final_mp4", "") if isinstance(final_media_copied, dict) else ""
+    final_media_burned_mp4 = final_media_copied.get("burned_final_mp4", "") if isinstance(final_media_copied, dict) else ""
     final_media_srt = final_media_copied.get("srt", "") if isinstance(final_media_copied, dict) else ""
     final_media_vtt = final_media_copied.get("vtt", "") if isinstance(final_media_copied, dict) else ""
 
@@ -861,8 +867,30 @@ def _render_project_detail(project_id: str) -> str:
     </section>
 
     <section class="band">
+      <h2>자막 번인 선택</h2>
+      <p class="muted">SRT sidecar는 유지하면서, 필요하면 final_preview.mp4에 자막을 직접 입힌 final_burned_subtitles.mp4를 추가로 만듭니다.</p>
+      <form method="post" action="/subtitle-burn">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">자막 번인 실행</button>
+          <span class="muted">상태: {_escape(subtitle_burn_state)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>번인 MP4</label>
+          <p><code>{_escape(burned_video_path or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>다음 작업</label>
+          <p>{_escape(subtitle_burn_next_step)}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
       <h2>수동 업로드 미디어 패키지</h2>
-      <p class="muted">preview.mp4와 SRT/VTT sidecar 자막을 수동 업로드 패키지의 media 폴더로 묶습니다. 실제 업로드는 실행하지 않습니다.</p>
+      <p class="muted">final_preview.mp4, 선택 번인본, SRT/VTT sidecar 자막을 수동 업로드 패키지의 media 폴더로 묶습니다. 실제 업로드는 실행하지 않습니다.</p>
       <form method="post" action="/final-media-package">
         <input type="hidden" name="project_id" value="{_escape(project_id)}">
         <div class="actions">
@@ -886,8 +914,8 @@ def _render_project_detail(project_id: str) -> str:
       </div>
       <div class="grid three">
         <div><label>MP4</label><p><code>{_escape(final_media_mp4 or '아직 패키징되지 않았습니다.')}</code></p></div>
-        <div><label>SRT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p></div>
-        <div><label>VTT</label><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
+        <div><label>번인 MP4</label><p><code>{_escape(final_media_burned_mp4 or '선택 사항입니다.')}</code></p></div>
+        <div><label>SRT/VTT</label><p><code>{_escape(final_media_srt or '아직 패키징되지 않았습니다.')}</code></p><p><code>{_escape(final_media_vtt or '아직 패키징되지 않았습니다.')}</code></p></div>
       </div>
     </section>
 
@@ -1526,6 +1554,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/audio-mix":
                 project_id = params.get("project_id", [""])[0]
                 mix_audio_for_video(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/subtitle-burn":
+                project_id = params.get("project_id", [""])[0]
+                burn_subtitles_for_video(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return
