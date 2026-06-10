@@ -559,6 +559,24 @@ Next recommended work:
 
 - Add connector smoke-check routes that call `evaluate_api_call(...)` before any network request and save only status metadata.
 
+## 2026-06-10 Production Flow Dashboard And API Smoke Guard Step
+
+Added production-flow readiness and guarded API smoke checks:
+
+- `src/ai_shorts/production_readiness.py` now includes a workflow summary for drafts, review, render, upload gates, and growth data.
+- `src/ai_shorts/api_smoke_check.py` adds smoke-check result saving, and every check calls `evaluate_api_call(...)` before any network work.
+- The web app now shows the content production flow table and API smoke-check buttons.
+- Current smoke checks do not execute network calls; they record blocked/ready status metadata only.
+
+Verification target:
+
+- Compile API smoke check, production readiness, web app, and tests.
+- Smoke-test that a connector check with a saved key is still blocked by the default cost guard and records `network_call_executed=False`.
+
+Next recommended work:
+
+- Add zero-cost, user-approved metadata-only smoke checks per connector, starting with API-key shape validation and official endpoint planning.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

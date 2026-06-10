@@ -3,6 +3,7 @@ from __future__ import annotations
 import zipfile
 
 from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
+from ai_shorts.api_smoke_check import run_api_smoke_check
 from ai_shorts.cost_guard import cost_guard_summary, evaluate_api_call, save_cost_guard
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
@@ -99,6 +100,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "API 키 준비" in html
     assert "API별 연결 준비" in html
     assert "API 비용 차단" in html
+    assert "콘텐츠 제작 흐름" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -351,6 +353,23 @@ def test_api_connector_readiness_groups_required_keys(tmp_path, monkeypatch) -> 
     assert all(item["network_check"] == "not_run" for item in ready)
 
 
+def test_api_smoke_check_uses_cost_guard_before_network(tmp_path, monkeypatch) -> None:
+    from ai_shorts import api_keys, api_smoke_check, cost_guard
+
+    monkeypatch.setattr(api_keys, "API_KEYS_PATH", tmp_path / "secrets" / "api_keys.json")
+    monkeypatch.setattr(cost_guard, "COST_GUARD_DIR", tmp_path / "settings")
+    monkeypatch.setattr(cost_guard, "COST_GUARD_PATH", tmp_path / "settings" / "cost_guard.json")
+    monkeypatch.setattr(api_smoke_check, "SMOKE_CHECK_DIR", tmp_path / "api_smoke_checks")
+    monkeypatch.setattr(api_smoke_check, "SMOKE_CHECK_PATH", tmp_path / "api_smoke_checks" / "latest_smoke_checks.json")
+    save_api_keys({"gemini_api_key": "gemini-secret-1234"})
+
+    result = run_api_smoke_check("gemini")
+    assert result["status"] == "blocked_by_cost_guard"
+    assert result["network_call_executed"] is False
+    assert result["cost_guard"]["reason"] == "external_api_calls_blocked"
+    assert pathlib_path_exists(str(tmp_path / "api_smoke_checks" / "latest_smoke_checks.json"))
+
+
 def test_cost_guard_blocks_external_and_paid_calls(tmp_path, monkeypatch) -> None:
     from ai_shorts import cost_guard
 
@@ -385,6 +404,7 @@ def test_production_readiness_reports_api_and_growth_state(tmp_path, monkeypatch
     report = build_production_readiness()
     assert report["overall_status"] == "needs_work"
     assert "api_keys_incomplete" in report["blockers"]
+    assert {item["stage"] for item in report["workflow"]} == {"초안", "검토", "렌더", "업로드 게이트", "성장 데이터"}
 
 
 def test_first_run_setup_turns_environment_into_actions() -> None:

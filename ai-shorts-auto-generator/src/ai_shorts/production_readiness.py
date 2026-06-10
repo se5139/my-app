@@ -26,6 +26,7 @@ def build_production_readiness() -> dict[str, Any]:
 
     growth_records = recent_performance_records(50)
     api_configured = configured_api_key_count()
+    workflow = _workflow_status(projects)
     blockers = []
     if not projects:
         blockers.append("draft_projects_missing")
@@ -43,9 +44,40 @@ def build_production_readiness() -> dict[str, Any]:
         "api_configured_count": api_configured,
         "api_total_count": 5,
         "api_keys": api_key_status(),
+        "workflow": workflow,
         "blockers": blockers,
         "next_step": _next_step(blockers, gate_counts),
     }
+
+
+def _workflow_status(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    gate_counts = {
+        "draft": 0,
+        "review": 0,
+        "render": 0,
+        "upload_gate": 0,
+        "growth_data": len(recent_performance_records(50)),
+    }
+    for item in projects:
+        project_id = str(item.get("id", ""))
+        if not project_id:
+            continue
+        summary = summarize_project_gate(PROJECTS_DIR / project_id)
+        gate = str(summary.get("blocking_gate", ""))
+        gate_counts["draft"] += 1
+        if gate in {"project_review", "compliance"}:
+            gate_counts["review"] += 1
+        elif gate in {"render_plan", "gif_preview", "mp4", "render_export"}:
+            gate_counts["render"] += 1
+        elif gate in {"final_upload", "complete"}:
+            gate_counts["upload_gate"] += 1
+    return [
+        {"stage": "초안", "count": gate_counts["draft"], "status": "ready" if gate_counts["draft"] else "missing"},
+        {"stage": "검토", "count": gate_counts["review"], "status": "needs_work" if gate_counts["review"] else "clear"},
+        {"stage": "렌더", "count": gate_counts["render"], "status": "needs_work" if gate_counts["render"] else "clear"},
+        {"stage": "업로드 게이트", "count": gate_counts["upload_gate"], "status": "ready" if gate_counts["upload_gate"] else "missing"},
+        {"stage": "성장 데이터", "count": gate_counts["growth_data"], "status": "ready" if gate_counts["growth_data"] else "missing"},
+    ]
 
 
 def _next_step(blockers: list[str], gate_counts: dict[str, int]) -> str:

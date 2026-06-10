@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .api_keys import API_KEY_FIELDS, api_connector_readiness, api_key_status, save_api_keys
+from .api_smoke_check import run_api_smoke_check
 from .cost_guard import cost_guard_summary, save_cost_guard
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
@@ -142,6 +143,14 @@ def _production_readiness_html() -> str:
         "</tr>"
         for item in report.get("api_keys", [])
     )
+    workflow_rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('stage'))}</td>"
+        f"<td>{int(item.get('count', 0))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+        "</tr>"
+        for item in report.get("workflow", [])
+    )
     blockers = ", ".join(report.get("blockers", [])) or "none"
     return f"""
     <section class="band">
@@ -149,6 +158,8 @@ def _production_readiness_html() -> str:
       <p>전체 상태 <span class="status">{_escape(report.get('overall_status'))}</span> · 초안 {int(report.get('project_count', 0))}개 · 업로드 준비 {int(report.get('ready_project_count', 0))}개</p>
       <p class="muted">성장 데이터 {int(report.get('growth_record_count', 0))}개 · API 키 {int(report.get('api_configured_count', 0))}/{int(report.get('api_total_count', 0))}개 · blockers: {_escape(blockers)}</p>
       <p>{_escape(report.get('next_step'))}</p>
+      <label>콘텐츠 제작 흐름</label>
+      <table><thead><tr><th>단계</th><th>대상 수</th><th>상태</th></tr></thead><tbody>{workflow_rows}</tbody></table>
       <div class="grid two">
         <div>
           <label>제작 게이트</label>
@@ -221,7 +232,7 @@ def _cost_guard_html(cost_guard_result: dict | None = None) -> str:
     """
 
 
-def _api_connector_readiness_html() -> str:
+def _api_connector_readiness_html(api_smoke_result: dict | None = None) -> str:
     rows = "".join(
         "<tr>"
         f"<td>{_escape(item.get('label'))}</td>"
@@ -229,14 +240,22 @@ def _api_connector_readiness_html() -> str:
         f"<td>{_escape(item.get('purpose'))}</td>"
         f"<td><code>{_escape(', '.join(item.get('missing_keys', [])) or 'none')}</code></td>"
         f"<td><code>{_escape(item.get('cost_guard', {}).get('reason'))}</code></td>"
-        f"<td>{_escape(item.get('next_step'))}</td>"
+        f"<td>{_escape(item.get('next_step'))}<form method=\"post\" action=\"/api-smoke-check\"><input type=\"hidden\" name=\"connector\" value=\"{_escape(item.get('name'))}\"><button class=\"secondary\" type=\"submit\">스모크 체크</button></form></td>"
         "</tr>"
         for item in api_connector_readiness()
     )
+    result_html = ""
+    if api_smoke_result:
+        result_html = f"""
+        <p>최근 스모크 체크 <span class="status">{_escape(api_smoke_result.get('status'))}</span> · {_escape(api_smoke_result.get('label'))}</p>
+        <p class="muted">비용 차단: <code>{_escape(api_smoke_result.get('cost_guard', {}).get('reason'))}</code> · 네트워크 호출 실행: <code>{_escape(api_smoke_result.get('network_call_executed'))}</code></p>
+        <p>{_escape(api_smoke_result.get('next_step'))}</p>
+        """
     return f"""
     <section class="band">
       <h2>API별 연결 준비</h2>
       <p class="muted">현재 단계에서는 외부 네트워크 호출 없이 저장된 키 조합만 확인합니다. 실제 연결 테스트는 다음 단계에서 별도로 실행합니다.</p>
+      {result_html}
       <table><thead><tr><th>API</th><th>상태</th><th>용도</th><th>부족한 키</th><th>비용 차단</th><th>다음 작업</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
     """
@@ -720,6 +739,7 @@ def _render_page(
     handoff_report: dict | None = None,
     api_result: dict | None = None,
     cost_guard_result: dict | None = None,
+    api_smoke_result: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -962,7 +982,7 @@ def _render_page(
     {_production_readiness_html()}
     {_api_key_setup_html(api_result)}
     {_cost_guard_html(cost_guard_result)}
-    {_api_connector_readiness_html()}
+    {_api_connector_readiness_html(api_smoke_result)}
     {_first_run_checklist_html()}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
@@ -1174,6 +1194,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/cost-guard":
                 cost_guard_result = save_cost_guard({"external_api_calls_allowed": params.get("external_api_calls_allowed", [""])[0]})
                 self._send(_render_page(cost_guard_result=cost_guard_result))
+                return
+            if self.path == "/api-smoke-check":
+                api_smoke_result = run_api_smoke_check(params.get("connector", [""])[0])
+                self._send(_render_page(api_smoke_result=api_smoke_result))
                 return
             if self.path == "/operations-snapshot":
                 snapshot = create_operations_snapshot()
