@@ -4259,29 +4259,48 @@ def bulk_report_detail_page(name: str) -> str:
         </form>
         """
 
-    def resolve_action_for_blocked() -> tuple[str, str]:
+    def blocked_resolution_for_reason(reason: str) -> tuple[str, str, str]:
+        if "최종 후보" in reason:
+            return "final", "최종 후보 먼저 만들기", "최종 후보 ZIP이 없어 막힌 항목"
+        if "재생성" in reason:
+            return "regen", "재생성 먼저 실행", "재생성 결과가 없어 막힌 항목"
+        if "수정계획" in reason:
+            return "review", "수정계획 먼저 만들기", "수정계획이 없어 막힌 항목"
         if action == "package":
-            return "final", "최종 후보 먼저 만들기"
+            return "final", "최종 후보 먼저 만들기", "제출 전 패키지 이전 단계가 필요한 항목"
         if action == "final":
-            return "regen", "재생성 먼저 실행"
+            return "regen", "재생성 먼저 실행", "최종 후보 이전 단계가 필요한 항목"
         if action == "regen":
-            return "review", "수정계획 먼저 만들기"
-        return "", "해결할 이전 단계 없음"
+            return "review", "수정계획 먼저 만들기", "재생성 이전 단계가 필요한 항목"
+        return "", "해결할 이전 단계 없음", "자동 해결 경로가 없는 항목"
 
-    def blocked_resolution_form() -> str:
-        resolve_action, label = resolve_action_for_blocked()
-        selected = names_for({"blocked"})
-        hidden_names = "".join(f"<input type='hidden' name='names' value='{html.escape(name_value)}'>" for name_value in selected)
-        disabled = " disabled" if not selected or not resolve_action else ""
-        return f"""
-        <form method="post" action="/bulk-review-action">
-          <input type="hidden" name="q" value="{html.escape(query)}">
-          <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
-          <input type="hidden" name="bulk_action" value="{html.escape(resolve_action)}">
-          {hidden_names}
-          <button class="primary" type="submit"{disabled}>{html.escape(label)} ({len(selected)}개)</button>
-        </form>
-        """
+    def blocked_resolution_forms() -> str:
+        groups: dict[tuple[str, str, str], list[str]] = {}
+        for item in records:
+            if not isinstance(item, dict) or str(item.get("status", "")) != "blocked":
+                continue
+            name_value = str(item.get("name", ""))
+            if not name_value:
+                continue
+            key = blocked_resolution_for_reason(str(item.get("reason", "")))
+            groups.setdefault(key, []).append(name_value)
+        if not groups:
+            return "<p>해결할 막힌 항목이 없습니다.</p>"
+        forms = ""
+        for (resolve_action, label, description), selected in groups.items():
+            hidden_names = "".join(f"<input type='hidden' name='names' value='{html.escape(name_value)}'>" for name_value in selected)
+            disabled = " disabled" if not resolve_action else ""
+            forms += f"""
+            <form method="post" action="/bulk-review-action">
+              <input type="hidden" name="q" value="{html.escape(query)}">
+              <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+              <input type="hidden" name="bulk_action" value="{html.escape(resolve_action)}">
+              {hidden_names}
+              <button class="primary" type="submit"{disabled}>{html.escape(label)} ({len(selected)}개)</button>
+              <small>{html.escape(description)}</small>
+            </form>
+            """
+        return forms
 
     rows = ""
     for item in records:
@@ -4351,9 +4370,9 @@ def bulk_report_detail_page(name: str) -> str:
   </section>
   <section class="panel">
     <h2>막힌 항목 해결</h2>
-    <p>현재 작업에서 막힌 항목을 필요한 이전 단계의 일괄 확인 화면으로 보냅니다.</p>
+    <p>막힌 사유별로 필요한 이전 단계의 일괄 확인 화면으로 보냅니다.</p>
     <div class="actions">
-      {blocked_resolution_form()}
+      {blocked_resolution_forms()}
     </div>
   </section>
   <section class="panel">
