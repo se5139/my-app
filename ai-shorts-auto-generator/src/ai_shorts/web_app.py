@@ -246,9 +246,20 @@ def _api_connector_readiness_html(api_smoke_result: dict | None = None) -> str:
     )
     result_html = ""
     if api_smoke_result:
+        validation_rows = "".join(
+            "<tr>"
+            f"<td><code>{_escape(item.get('field'))}</code></td>"
+            f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+            f"<td>{_escape(item.get('hint'))}</td>"
+            "</tr>"
+            for item in api_smoke_result.get("local_key_validation", [])
+        )
+        endpoint_plan = api_smoke_result.get("endpoint_plan", {})
         result_html = f"""
         <p>최근 스모크 체크 <span class="status">{_escape(api_smoke_result.get('status'))}</span> · {_escape(api_smoke_result.get('label'))}</p>
         <p class="muted">비용 차단: <code>{_escape(api_smoke_result.get('cost_guard', {}).get('reason'))}</code> · 네트워크 호출 실행: <code>{_escape(api_smoke_result.get('network_call_executed'))}</code></p>
+        <p class="muted">엔드포인트 계획: {_escape(endpoint_plan.get('description'))} · 예상 비용 단위: <code>{_escape(endpoint_plan.get('estimated_cost_units'))}</code> · 네트워크 활성화: <code>{_escape(endpoint_plan.get('network_call_enabled'))}</code></p>
+        <table><thead><tr><th>키</th><th>로컬 형식</th><th>검증 기준</th></tr></thead><tbody>{validation_rows}</tbody></table>
         <p>{_escape(api_smoke_result.get('next_step'))}</p>
         """
     return f"""

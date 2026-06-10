@@ -367,7 +367,27 @@ def test_api_smoke_check_uses_cost_guard_before_network(tmp_path, monkeypatch) -
     assert result["status"] == "blocked_by_cost_guard"
     assert result["network_call_executed"] is False
     assert result["cost_guard"]["reason"] == "external_api_calls_blocked"
+    assert result["local_key_validation"][0]["status"] == "shape_ok"
+    assert result["endpoint_plan"]["network_call_enabled"] is False
+    assert result["endpoint_plan"]["estimated_cost_units"] == 0
     assert pathlib_path_exists(str(tmp_path / "api_smoke_checks" / "latest_smoke_checks.json"))
+
+
+def test_api_smoke_check_flags_short_key_shape_without_network(tmp_path, monkeypatch) -> None:
+    from ai_shorts import api_keys, api_smoke_check, cost_guard
+
+    monkeypatch.setattr(api_keys, "API_KEYS_PATH", tmp_path / "secrets" / "api_keys.json")
+    monkeypatch.setattr(cost_guard, "COST_GUARD_DIR", tmp_path / "settings")
+    monkeypatch.setattr(cost_guard, "COST_GUARD_PATH", tmp_path / "settings" / "cost_guard.json")
+    monkeypatch.setattr(api_smoke_check, "SMOKE_CHECK_DIR", tmp_path / "api_smoke_checks")
+    monkeypatch.setattr(api_smoke_check, "SMOKE_CHECK_PATH", tmp_path / "api_smoke_checks" / "latest_smoke_checks.json")
+    save_api_keys({"gemini_api_key": "short"})
+
+    result = run_api_smoke_check("gemini")
+    assert result["status"] == "invalid_key_shape"
+    assert result["network_call_executed"] is False
+    assert result["local_key_validation"][0]["status"] == "too_short"
+    assert result["cost_guard"]["reason"] == "external_api_calls_blocked"
 
 
 def test_cost_guard_blocks_external_and_paid_calls(tmp_path, monkeypatch) -> None:

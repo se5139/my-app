@@ -132,6 +132,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - API cost guard that blocks external calls by default and always blocks paid/cost-incurring calls
 - production flow readiness table for drafts, review, render, upload gates, and growth data
 - API smoke-check route that always evaluates the cost guard before any network call
+- zero-cost API smoke metadata with local key-shape validation and planned endpoint notes
 
 ## New PC Restore Guide
 

@@ -27,6 +27,25 @@ ai-shorts-auto-generator/
 
 As of 2026-06-09, Git was not available from PowerShell PATH in this Codex session. The GitHub connector can save UTF-8 text files to the remote repository, but normal local `git commit` and `git push` require Git to be installed or exposed in PATH.
 
+## 2026-06-10 Zero-Cost API Smoke Metadata Step
+
+Added a safer pre-network API smoke-check layer:
+
+- `src/ai_shorts/api_smoke_check.py` now records local key-shape validation for Gemini, YouTube, Naver, and Kakao required keys.
+- Smoke-check results include a zero-cost endpoint plan with `network_call_enabled=False` and `estimated_cost_units=0`.
+- The web API readiness panel now shows local key-shape validation rows and the planned endpoint note after each smoke check.
+- Actual Gemini/YouTube/Naver/Kakao network calls are still not executed.
+
+Verification target:
+
+- Compile API smoke check, web app, and tests.
+- Smoke-test normal-length keys through the default cost guard.
+- Smoke-test too-short keys returning `invalid_key_shape` without network calls.
+
+Next recommended work:
+
+- Add a manual approval toggle for zero-cost external metadata checks, still routed through `evaluate_api_call(...)`.
+
 ## 2026-06-09 Rebuild Start
 
 Reviewed `shorts_auto_maker_v108_growth_learning.zip` as a reference package.
