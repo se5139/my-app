@@ -27,6 +27,6 @@ foreach ($Candidate in $Candidates) {
 }
 
 Set-Location -LiteralPath $Root
-Write-Host "AI Shorts Auto Generator"
-Write-Host "Open http://127.0.0.1:8731"
+Write-Host "쇼츠 자동 생성 프로그램을 시작합니다."
+Write-Host "브라우저에서 http://127.0.0.1:8731 주소를 여세요."
 & $Python -m ai_shorts.web_app

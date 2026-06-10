@@ -27,6 +27,24 @@ ai-shorts-auto-generator/
 
 As of 2026-06-09, Git was not available from PowerShell PATH in this Codex session. The GitHub connector can save UTF-8 text files to the remote repository, but normal local `git commit` and `git push` require Git to be installed or exposed in PATH.
 
+## 2026-06-10 Korean Beginner Docs And Dependency Step
+
+Cleaned up the beginner-facing setup surface without removing existing features:
+
+- `pyproject.toml` now declares the actual required dependency, `Pillow`.
+- `requirements.txt` was added for simple Windows installation.
+- `README.md` was rewritten as a Korean-first beginner guide with setup, resume, API-key, cost-safety, and upload-safety notes.
+- `docs/NEW_PC_START_HERE.md` was rewritten as a Korean new-PC continuation guide.
+- `START_WEB_APP.ps1` now prints Korean start instructions.
+
+Important finding:
+
+- UTF-8 source files did not contain replacement-character corruption during this step. Earlier Korean mojibake appears to be mostly PowerShell display encoding, but UI strings should still be checked through browser rendering after future UI edits.
+
+Next recommended work:
+
+- Add 30/45/60 second duration selection and a `timing_plan.json` structure without replacing the current script/render preview flow.
+
 ## 2026-06-10 Zero-Cost API Smoke Metadata Step
 
 Added a safer pre-network API smoke-check layer:
