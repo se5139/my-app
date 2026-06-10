@@ -2560,6 +2560,7 @@ def load_recent_results(limit: int = 30) -> list[dict[str, object]]:
                 "evidence_zip": evidence.get("zip", ""),
                 "build_report": str(report_path),
                 "stage_labels": stage_labels,
+                "stages": stages,
                 "completed_stage_count": completed_stage_count,
                 "total_stage_count": len(stage_labels),
                 "progress_percent": progress_percent,
@@ -3628,12 +3629,62 @@ def release_check_page() -> str:
 </html>"""
 
 
-def results_page() -> str:
-    rows = load_recent_results()
-    total_rows = len(rows)
+def results_page(query: str = "", stage_filter: str = "all") -> str:
+    all_rows = load_recent_results()
+    query = query.strip()
+    stage_filter = stage_filter if stage_filter in {
+        "all",
+        "needs_review",
+        "needs_regen",
+        "needs_final",
+        "needs_package",
+        "complete",
+    } else "all"
+
+    def matches_stage(row: dict[str, object]) -> bool:
+        stages = row.get("stages", {})
+        if not isinstance(stages, dict):
+            stages = {}
+        if stage_filter == "needs_review":
+            return not bool(stages.get("review_action"))
+        if stage_filter == "needs_regen":
+            return bool(stages.get("review_action")) and not bool(stages.get("regenerated"))
+        if stage_filter == "needs_final":
+            return bool(stages.get("regenerated")) and not bool(stages.get("final_candidates"))
+        if stage_filter == "needs_package":
+            return bool(stages.get("final_candidates")) and not bool(stages.get("pre_submission"))
+        if stage_filter == "complete":
+            return bool(stages.get("pre_submission"))
+        return True
+
+    def matches_query(row: dict[str, object]) -> bool:
+        if not query:
+            return True
+        needle = query.lower()
+        haystack = " ".join(
+            str(row.get(key, ""))
+            for key in ["character_name", "name", "product_label", "workflow_label", "readiness_label", "next_action_label"]
+        ).lower()
+        return needle in haystack
+
+    rows = [row for row in all_rows if matches_stage(row) and matches_query(row)]
+    total_rows = len(all_rows)
+    filtered_rows = len(rows)
     pre_submission_count = sum(1 for row in rows if row.get("pre_submission_status"))
     final_count = sum(1 for row in rows if row.get("final_zip"))
     regen_count = sum(1 for row in rows if any(label == "재생성" and enabled for label, enabled in row.get("stage_labels", [])))
+    filter_options = [
+        ("all", "전체"),
+        ("needs_review", "수정계획 필요"),
+        ("needs_regen", "재생성 필요"),
+        ("needs_final", "최종후보 필요"),
+        ("needs_package", "제출전팩 필요"),
+        ("complete", "완료"),
+    ]
+    filter_links = "".join(
+        f"<a class='filter {'active' if value == stage_filter else ''}' href='/results?stage={html.escape(value)}&q={quote(query)}'>{html.escape(label)}</a>"
+        for value, label in filter_options
+    )
     row_html = ""
     for row in rows:
         def row_link(label: str, key: str) -> str:
@@ -3705,7 +3756,7 @@ def results_page() -> str:
         </tr>
         """
     if not row_html:
-        row_html = "<tr><td colspan='9'>아직 생성 결과가 없습니다.</td></tr>"
+        row_html = "<tr><td colspan='9'>조건에 맞는 생성 결과가 없습니다.</td></tr>"
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -3733,6 +3784,13 @@ def results_page() -> str:
     .link-group {{ margin-bottom:7px; }}
     .link-group strong {{ display:block; margin-bottom:2px; color:#2d2424; font-size:12px; }}
     .link-group span {{ display:flex; flex-wrap:wrap; gap:3px; }}
+    .filter-bar {{ display:grid; gap:10px; margin-top:14px; }}
+    .filter-row {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }}
+    .filter-form {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+    .filter-form input {{ border:1px solid #d8ccbc; border-radius:999px; padding:10px 12px; min-width:220px; font:inherit; }}
+    a.filter {{ background:#f7f4ef; border-color:#d8ccbc; color:#5d534e; }}
+    a.filter.active {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+    button.filter-button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
@@ -3745,6 +3803,16 @@ def results_page() -> str:
     <h1>최근 결과물</h1>
     <p>최근 생성한 결과 폴더의 진행 상태와 갤러리, ZIP, 리포트를 바로 확인합니다.</p>
     <p><a class="nav" href="/">제작 화면</a><a class="nav" href="/memory">진화 메모리</a><a class="nav" href="/status">실행 상태</a><a class="nav" href="/release-check">배포 점검</a></p>
+    <div class="filter-bar">
+      <form class="filter-form" method="get" action="/results">
+        <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+        <input name="q" value="{html.escape(query)}" placeholder="캐릭터, 폴더명, 상태 검색">
+        <button class="filter-button" type="submit">검색</button>
+        <a href="/results">초기화</a>
+      </form>
+      <div class="filter-row">{filter_links}</div>
+      <p>표시 {filtered_rows}개 / 전체 {total_rows}개</p>
+    </div>
     <div class="summary">
       <div class="metric"><span>최근 결과</span><strong>{total_rows}</strong></div>
       <div class="metric"><span>최종 후보 ZIP</span><strong>{final_count}</strong></div>
@@ -7554,13 +7622,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api-settings":
             self.respond(200, api_settings_page())
             return
-        if self.path == "/results":
-            self.respond(200, results_page())
-            return
         if self.path == "/release-check":
             self.respond(200, release_check_page())
             return
         parsed = urlparse(self.path)
+        if parsed.path == "/results":
+            params = parse_qs(parsed.query)
+            self.respond(200, results_page(params.get("q", [""])[0], params.get("stage", ["all"])[0]))
+            return
         if parsed.path == "/result":
             params = parse_qs(parsed.query)
             self.respond(200, result_detail_page(params.get("name", [""])[0]))
