@@ -3629,7 +3629,7 @@ def release_check_page() -> str:
 </html>"""
 
 
-def results_page(query: str = "", stage_filter: str = "all") -> str:
+def results_page(query: str = "", stage_filter: str = "all", message: str = "") -> str:
     all_rows = load_recent_results()
     query = query.strip()
     stage_filter = stage_filter if stage_filter in {
@@ -3742,8 +3742,11 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
             if next_action_href
             else html.escape(str(row.get("next_action_label", "")))
         )
+        stages = row.get("stages", {})
+        should_check = bool(isinstance(stages, dict) and not stages.get("review_action") and stage_filter == "needs_review")
         row_html += f"""
         <tr>
+          <td><input type="checkbox" name="names" value="{html.escape(str(row.get("name", "")))}" {'checked' if should_check else ''}></td>
           <td>{html.escape(str(row.get("mtime", "")))}</td>
           <td><strong>{html.escape(str(row.get("character_name", "")))}</strong><br><small>{html.escape(str(row.get("name", "")))}</small></td>
           <td>{html.escape(str(row.get("product_label", "")))}</td>
@@ -3760,7 +3763,8 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
         </tr>
         """
     if not row_html:
-        row_html = "<tr><td colspan='9'>조건에 맞는 생성 결과가 없습니다.</td></tr>"
+        row_html = "<tr><td colspan='10'>조건에 맞는 생성 결과가 없습니다.</td></tr>"
+    notice_html = f"<section class='panel notice'>{html.escape(message)}</section>" if message else ""
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -3776,6 +3780,7 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     .summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:14px; }}
     .metric {{ background:#fffaf0; border:1px solid #ead8bc; border-radius:18px; padding:14px; }}
     .metric strong {{ display:block; font-size:28px; color:#2d2424; }}
+    .notice {{ border-color:#7fd8be; background:#e9fff4; font-weight:900; }}
     table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
     th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
     th {{ color:#2d2424; background:#fff3d8; }}
@@ -3796,6 +3801,8 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     a.filter.active {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
     a.filter strong {{ display:inline-block; margin-left:4px; padding:1px 6px; border-radius:999px; background:rgba(255,255,255,.72); }}
     button.filter-button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
+    .bulk-bar {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; padding:12px; border:1px solid #ead8bc; border-radius:18px; background:#fffaf0; }}
+    .bulk-bar button {{ border:1px solid #54bea0; border-radius:999px; padding:10px 14px; background:#7fd8be; font-weight:900; color:#1e3830; cursor:pointer; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
@@ -3804,6 +3811,7 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
 </head>
 <body>
 <main>
+  {notice_html}
   <section class="panel">
     <h1>최근 결과물</h1>
     <p>최근 생성한 결과 폴더의 진행 상태와 갤러리, ZIP, 리포트를 바로 확인합니다.</p>
@@ -3828,12 +3836,21 @@ def results_page(query: str = "", stage_filter: str = "all") -> str:
     </div>
   </section>
   <section class="panel">
-    <table>
-      <thead>
-        <tr><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>다음 작업</th><th>바로가기</th></tr>
-      </thead>
-      <tbody>{row_html}</tbody>
-    </table>
+    <form method="post" action="/bulk-review-action">
+      <input type="hidden" name="q" value="{html.escape(query)}">
+      <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
+      <div class="bulk-bar">
+        <strong>일괄 작업</strong>
+        <button type="submit">선택 항목 수정계획 생성</button>
+        <small>이미 수정계획이 있는 결과는 건너뜁니다.</small>
+      </div>
+      <table>
+        <thead>
+          <tr><th>선택</th><th>시간</th><th>캐릭터</th><th>상품</th><th>진행</th><th>검사</th><th>준비 점수</th><th>문구 품질</th><th>다음 작업</th><th>바로가기</th></tr>
+        </thead>
+        <tbody>{row_html}</tbody>
+      </table>
+    </form>
   </section>
 </main>
 </body>
@@ -7659,6 +7676,32 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api-usage/reset":
             reset_api_usage_ledger()
             self.respond(200, api_settings_page("API 사용량 원장을 초기화했습니다. 키와 환경변수는 변경하지 않았습니다."))
+            return
+        if self.path == "/bulk-review-action":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
+            form = parse_qs(body.decode("utf-8", errors="replace"))
+            created = 0
+            skipped = 0
+            missing = 0
+            for name in form.get("names", []):
+                output_dir = safe_output_dir_by_name(name)
+                if output_dir is None:
+                    missing += 1
+                    continue
+                if (output_dir / "review_action_plan.json").exists():
+                    skipped += 1
+                    continue
+                build_review_action_plan(output_dir, [], "weak", "목록에서 일괄 생성한 수정 계획")
+                created += 1
+            if not form.get("names", []):
+                message = "선택된 결과가 없습니다. 처리할 결과를 체크한 뒤 다시 실행하세요."
+            else:
+                message = f"일괄 수정계획 생성 완료: 생성 {created}개 / 건너뜀 {skipped}개 / 찾을 수 없음 {missing}개"
+            self.respond(
+                200,
+                results_page(form_value(form, "q", ""), form_value(form, "stage", "all"), message),
+            )
             return
         if self.path == "/review-action":
             length = int(self.headers.get("Content-Length", "0"))
