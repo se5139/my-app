@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
+from ai_shorts.first_run_setup import build_first_run_checklist
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
@@ -83,6 +84,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "새 쇼츠 초안" in html
     assert "주간 2~3개 계획" in html
     assert "로컬 환경 점검" in html
+    assert "첫 실행 설정 체크리스트" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -271,3 +273,20 @@ def test_environment_check_reports_core_items() -> None:
     names = {item["name"] for item in report["checks"]}
     assert {"Python", "Git", "Data folder", "Projects", "FFmpeg"}.issubset(names)
     assert report["overall_status"] in {"ready", "usable_with_warnings", "needs_setup"}
+
+
+def test_first_run_setup_turns_environment_into_actions() -> None:
+    checklist = build_first_run_checklist(
+        {
+            "checks": [
+                {"name": "Python", "status": "pass"},
+                {"name": "Git", "status": "warn"},
+                {"name": "Data folder", "status": "warn"},
+                {"name": "Projects", "status": "warn"},
+                {"name": "FFmpeg", "status": "warn"},
+            ]
+        }
+    )
+    action_ids = {item["id"] for item in checklist["actions"]}
+    assert {"clone_or_pull_repo", "restore_snapshot_data", "start_web_app", "enable_mp4_rendering"}.issubset(action_ids)
+    assert checklist["overall_status"] in {"blocked", "needs_attention", "ready"}

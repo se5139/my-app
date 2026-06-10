@@ -121,6 +121,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - operations snapshot export that bundles local `data` state into a handoff zip and markdown summary
 - new-PC restore guide shown in the web UI and documented in `docs/NEW_PC_START_HERE.md`
 - local environment check panel for Python, Git, data folder, project state, and ffmpeg readiness
+- first-run setup checklist that turns environment warnings into ordered actions
 
 ## New PC Restore Guide
 

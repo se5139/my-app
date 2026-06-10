@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .environment_check import collect_environment_check
+from .first_run_setup import build_first_run_checklist
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -117,6 +118,27 @@ def _environment_check_html() -> str:
       <p>전체 상태 <span class="status">{_escape(report.get('overall_status'))}</span></p>
       <p class="muted">다른 PC에서 이어받을 때 필요한 Python, Git, data 폴더, ffmpeg 상태를 읽기 전용으로 확인합니다.</p>
       <table><thead><tr><th>항목</th><th>상태</th><th>설명</th><th>위치/조치</th></tr></thead><tbody>{rows}</tbody></table>
+    </section>
+    """
+
+
+def _first_run_checklist_html() -> str:
+    checklist = build_first_run_checklist()
+    rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('priority'))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+        f"<td><strong>{_escape(item.get('title'))}</strong><br><span>{_escape(item.get('body'))}</span></td>"
+        f"<td><code>{_escape(item.get('command'))}</code></td>"
+        "</tr>"
+        for item in checklist.get("actions", [])
+    )
+    return f"""
+    <section class="band">
+      <h2>첫 실행 설정 체크리스트</h2>
+      <p>진행 상태 <span class="status">{_escape(checklist.get('overall_status'))}</span></p>
+      <p class="muted">환경 점검 결과를 바탕으로 새 PC에서 먼저 처리할 작업 순서를 보여줍니다.</p>
+      <table><thead><tr><th>우선순위</th><th>상태</th><th>작업</th><th>명령/조치</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
     """
 
@@ -683,6 +705,7 @@ def _render_page(
     {error_html}
     {detail_html}
     {_environment_check_html()}
+    {_first_run_checklist_html()}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
       <form method="post" action="/create">

@@ -421,6 +421,23 @@ Next recommended work:
 
 - Add a first-run setup checklist that turns missing environment warnings into step-by-step actions.
 
+## 2026-06-10 First-Run Setup Checklist Step
+
+Added a first-run setup checklist:
+
+- `src/ai_shorts/first_run_setup.py` converts environment checks into required, recommended, and optional actions.
+- The home page now shows `첫 실행 설정 체크리스트` below the local environment panel.
+- The checklist points to repo sync, snapshot restore, web app start, and optional ffmpeg setup.
+
+Verification target:
+
+- Compile first-run setup, web app, and tests.
+- Smoke-test checklist generation and web HTML rendering.
+
+Next recommended work:
+
+- Add clickable setup guide exports for missing Git, missing data snapshot, and missing ffmpeg.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
