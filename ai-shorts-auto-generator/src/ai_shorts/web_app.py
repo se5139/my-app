@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .environment_check import collect_environment_check
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -97,6 +98,27 @@ def _restore_guide_html() -> str:
         for step in restore_steps()
     )
     return f'<ol class="scenes">{items}</ol>'
+
+
+def _environment_check_html() -> str:
+    report = collect_environment_check()
+    rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('name'))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+        f"<td>{_escape(item.get('message'))}</td>"
+        f"<td><code>{_escape(item.get('detail'))}</code></td>"
+        "</tr>"
+        for item in report.get("checks", [])
+    )
+    return f"""
+    <section class="band">
+      <h2>로컬 환경 점검</h2>
+      <p>전체 상태 <span class="status">{_escape(report.get('overall_status'))}</span></p>
+      <p class="muted">다른 PC에서 이어받을 때 필요한 Python, Git, data 폴더, ffmpeg 상태를 읽기 전용으로 확인합니다.</p>
+      <table><thead><tr><th>항목</th><th>상태</th><th>설명</th><th>위치/조치</th></tr></thead><tbody>{rows}</tbody></table>
+    </section>
+    """
 
 
 def _render_project_detail(project_id: str) -> str:
@@ -660,6 +682,7 @@ def _render_page(
   <main>
     {error_html}
     {detail_html}
+    {_environment_check_html()}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
       <form method="post" action="/create">

@@ -404,6 +404,23 @@ Next recommended work:
 
 - Add a local environment check panel that shows Git, Python, data folder, and ffmpeg readiness from inside the web UI.
 
+## 2026-06-10 Local Environment Check Step
+
+Added a read-only environment readiness panel:
+
+- `src/ai_shorts/environment_check.py` reports Python, Git, data folder, project state, and ffmpeg readiness.
+- The home page now shows `로컬 환경 점검` near the top so another PC can quickly spot setup gaps.
+- Tests cover the core environment-check item list and web rendering.
+
+Verification target:
+
+- Compile environment check, web app, and tests.
+- Smoke-test the environment report and web HTML rendering.
+
+Next recommended work:
+
+- Add a first-run setup checklist that turns missing environment warnings into step-by-step actions.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

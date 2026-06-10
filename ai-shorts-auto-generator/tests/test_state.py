@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
+from ai_shorts.environment_check import collect_environment_check
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
@@ -81,6 +82,7 @@ def test_web_app_renders_korean_workspace() -> None:
     html = _render_page().decode("utf-8")
     assert "새 쇼츠 초안" in html
     assert "주간 2~3개 계획" in html
+    assert "로컬 환경 점검" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -262,3 +264,10 @@ def test_restore_guide_has_repo_and_snapshot_steps() -> None:
     assert any("github.com/se5139/my-app.git" in step["command"] for step in steps)
     assert any("data folder" in step["body"] for step in steps)
     assert "New PC Start Here" in markdown
+
+
+def test_environment_check_reports_core_items() -> None:
+    report = collect_environment_check()
+    names = {item["name"] for item in report["checks"]}
+    assert {"Python", "Git", "Data folder", "Projects", "FFmpeg"}.issubset(names)
+    assert report["overall_status"] in {"ready", "usable_with_warnings", "needs_setup"}
