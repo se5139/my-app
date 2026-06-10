@@ -80,6 +80,7 @@ my-app\ai-shorts-auto-generator\data
 - 주간 2~3개 초안 계획: `src/ai_shorts/weekly_planner.py`
 - 로컬 대본 초안 생성: `src/ai_shorts/script_lab.py`
 - 30초/45초/60초 목표 길이와 장면별 타이밍 계획: `src/ai_shorts/timing_plan.py`
+- SRT/VTT 자막 생성과 줄 길이/싱크 검증: `src/ai_shorts/subtitle_export.py`
 - 수동 업로드 패키지 생성: `src/ai_shorts/package_exporter.py`
 - SVG/PNG/GIF 미리보기 생성: `src/ai_shorts/render_placeholder.py`, `src/ai_shorts/render_preview.py`
 - ffmpeg가 있을 때 MP4 미리보기 생성: `src/ai_shorts/ffmpeg_renderer.py`

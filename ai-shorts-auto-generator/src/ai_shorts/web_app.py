@@ -27,6 +27,7 @@ from .workflow import (
     create_ffmpeg_setup_guide,
     generate_placeholder_render,
     generate_preview_render,
+    generate_subtitle_export,
     update_final_upload_checklist,
     update_render_export_review,
     update_draft_script,
@@ -407,12 +408,14 @@ def _render_project_detail(project_id: str) -> str:
     package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
     render_dir = PROJECTS_DIR / project_id / "renders" / "placeholder"
     preview_dir = PROJECTS_DIR / project_id / "renders" / "preview"
+    subtitle_dir = PROJECTS_DIR / project_id / "renders" / "subtitles"
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export_status = read_json(package_dir / "render_export_status.json", {})
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     render_plan = read_json(render_dir / "render_plan.json", {})
     timing_plan = read_json(render_dir / "timing_plan.json", {})
+    subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_info = read_json(preview_dir / "mp4_status.json", {})
     ffmpeg_guide = read_json(preview_dir / "ffmpeg_setup_guide.json", {})
@@ -488,6 +491,12 @@ def _render_project_detail(project_id: str) -> str:
     timing_plan_path = render_plan.get("timing_plan", "") if isinstance(render_plan, dict) else ""
     timing_status = timing_plan.get("status", "not_created") if isinstance(timing_plan, dict) else "not_created"
     timing_total_duration = timing_plan.get("total_duration_sec", "") if isinstance(timing_plan, dict) else ""
+    subtitle_status = subtitle_manifest.get("status", "not_created") if isinstance(subtitle_manifest, dict) else "not_created"
+    subtitle_validation = subtitle_manifest.get("validation", {}) if isinstance(subtitle_manifest, dict) else {}
+    subtitle_issues = subtitle_validation.get("issues", []) if isinstance(subtitle_validation, dict) else []
+    subtitle_issue_text = ", ".join(str(item) for item in subtitle_issues) if subtitle_issues else "없음"
+    subtitle_srt = subtitle_manifest.get("srt_path", "") if isinstance(subtitle_manifest, dict) else ""
+    subtitle_vtt = subtitle_manifest.get("vtt_path", "") if isinstance(subtitle_manifest, dict) else ""
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -642,6 +651,28 @@ def _render_project_detail(project_id: str) -> str:
         </div>
       </div>
       <table><thead><tr><th>#</th><th>자막</th><th>구간</th><th>길이</th><th>SVG 파일</th></tr></thead><tbody>{render_rows}</tbody></table>
+    </section>
+
+    <section class="band">
+      <h2>SRT/VTT 자막</h2>
+      <p class="muted">timing_plan.json을 기준으로 SRT/VTT 자막 파일을 만들고, 줄 길이와 싱크를 검증합니다.</p>
+      <form method="post" action="/subtitle-export">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="actions">
+          <button type="submit">자막 파일 생성</button>
+          <span class="muted">상태: {_escape(subtitle_status)} · 검증 이슈: {_escape(subtitle_issue_text)}</span>
+        </div>
+      </form>
+      <div class="grid two">
+        <div>
+          <label>SRT 파일</label>
+          <p><code>{_escape(subtitle_srt or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+        <div>
+          <label>VTT 파일</label>
+          <p><code>{_escape(subtitle_vtt or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+      </div>
     </section>
 
     <section class="band">
@@ -1289,6 +1320,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/render-preview":
                 project_id = params.get("project_id", [""])[0]
                 generate_preview_render(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/subtitle-export":
+                project_id = params.get("project_id", [""])[0]
+                generate_subtitle_export(project_id)
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

@@ -11,6 +11,7 @@ from .render_placeholder import create_render_placeholders
 from .render_preview import create_preview_media
 from .script_lab import create_local_script_draft, normalize_target_duration, script_draft_from_dict
 from .state import ShortProject, create_project, load_app_state, now_iso, read_json, save_app_state, write_json
+from .subtitle_export import create_subtitle_files
 from .upload_checklist import build_final_upload_checklist
 
 
@@ -95,6 +96,16 @@ def generate_preview_render(project_id: str) -> dict[str, Any]:
     if not (project_dir / "renders" / "placeholder" / "render_plan.json").exists():
         generate_placeholder_render(project_id)
     return create_preview_media(project_id, project_dir)
+
+
+def generate_subtitle_export(project_id: str) -> dict[str, Any]:
+    ensure_data_dirs()
+    project_dir = PROJECTS_DIR / project_id
+    if not read_json(project_dir / "project.json", {}):
+        raise FileNotFoundError(f"Project not found: {project_id}")
+    if not (project_dir / "renders" / "placeholder" / "timing_plan.json").exists():
+        generate_placeholder_render(project_id)
+    return create_subtitle_files(project_id, project_dir)
 
 
 def check_or_render_mp4(project_id: str, render: bool = False) -> dict[str, Any]:

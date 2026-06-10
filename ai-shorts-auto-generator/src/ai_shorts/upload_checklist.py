@@ -9,15 +9,18 @@ from .state import now_iso, read_json, write_json
 def build_final_upload_checklist(project_dir: Path, reviewer_note: str = "") -> dict[str, Any]:
     package_dir = project_dir / "exports" / "manual_upload_package"
     preview_dir = project_dir / "renders" / "preview"
+    subtitle_dir = project_dir / "renders" / "subtitles"
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export = read_json(package_dir / "render_export_status.json", {})
     asset_notes = read_json(package_dir / "asset_source_notes.json", {})
     project = read_json(project_dir / "project.json", {})
+    subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
 
     checks = {
         "human_project_review": project.get("review", {}).get("status") == "approved_for_export",
         "compliance_passed": compliance.get("status") == "pass",
         "asset_source_notes_present": (package_dir / "asset_source_notes.json").exists() and isinstance(asset_notes, dict),
+        "subtitles_ready": subtitle_manifest.get("status") == "subtitles_ready",
         "render_export_ready": render_export.get("status") == "ready_for_manual_upload",
         "mp4_present": (preview_dir / "preview.mp4").exists(),
         "title_present": _has_text(package_dir / "title.txt"),
@@ -49,6 +52,8 @@ def _next_step(missing: list[str]) -> str:
         return "All gates passed. Manual upload may proceed after a final human check."
     if "mp4_present" in missing:
         return "Create preview.mp4 before final manual upload."
+    if "subtitles_ready" in missing:
+        return "Create and review SRT/VTT subtitles before final manual upload."
     if "compliance_passed" in missing:
         return "Resolve compliance findings before final upload."
     if "human_project_review" in missing:

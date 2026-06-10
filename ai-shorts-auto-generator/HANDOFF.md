@@ -27,6 +27,21 @@ ai-shorts-auto-generator/
 
 As of 2026-06-09, Git was not available from PowerShell PATH in this Codex session. The GitHub connector can save UTF-8 text files to the remote repository, but normal local `git commit` and `git push` require Git to be installed or exposed in PATH.
 
+## 2026-06-10 SRT VTT Subtitle Gate Step
+
+Added local subtitle export from the timing plan:
+
+- New `src/ai_shorts/subtitle_export.py` reads `renders/placeholder/timing_plan.json`.
+- It writes `renders/subtitles/subtitles.srt`, `subtitles.vtt`, `subtitle_manifest.json`, and `subtitle_validation.json`.
+- Subtitle validation checks empty/invalid timing, overlapping scenes, line length, line count, and total duration drift.
+- The web project detail screen now has an SRT/VTT subtitle generation action and displays subtitle paths/status.
+- Render export now requires valid subtitles when a timing plan exists.
+- Final upload checklist now includes a `subtitles_ready` gate.
+
+Next recommended work:
+
+- Add final MP4 rendering that consumes timing/subtitle plans more accurately, including subtitle burn-in or sidecar subtitle packaging.
+
 ## 2026-06-10 Duration Selection And Timing Plan Step
 
 Added the first timing layer without replacing the existing script/render flow:

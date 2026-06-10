@@ -18,6 +18,7 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
+from ai_shorts.subtitle_export import create_subtitle_files
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
 from ai_shorts.production_readiness import build_production_readiness
@@ -150,6 +151,20 @@ def test_preview_media_creates_gif_and_manifest(tmp_path) -> None:
     assert (tmp_path / "renders" / "preview" / "preview_manifest.json").exists()
 
 
+def test_subtitle_export_creates_srt_vtt_and_manifest(tmp_path) -> None:
+    draft = create_local_script_draft("자막 테스트", "주제만 참고", target_duration_sec=30)
+    create_render_placeholders("p1", draft, tmp_path)
+    manifest = create_subtitle_files("p1", tmp_path)
+    assert manifest["status"] == "subtitles_ready"
+    assert manifest["validation"]["valid"] is True
+    assert manifest["validation"]["entry_count"] == len(draft.scenes)
+    assert manifest["validation"]["total_duration_sec"] == 30
+    assert (tmp_path / "renders" / "subtitles" / "subtitles.srt").exists()
+    assert (tmp_path / "renders" / "subtitles" / "subtitles.vtt").exists()
+    assert (tmp_path / "renders" / "subtitles" / "subtitle_manifest.json").exists()
+    assert "WEBVTT" in (tmp_path / "renders" / "subtitles" / "subtitles.vtt").read_text(encoding="utf-8")
+
+
 def test_mp4_status_records_ffmpeg_state(tmp_path) -> None:
     (tmp_path / "renders" / "preview").mkdir(parents=True)
     status = mp4_status(tmp_path)
@@ -169,12 +184,23 @@ def test_render_export_status_records_review_assets(tmp_path) -> None:
     draft = create_local_script_draft("렌더 승인 테스트", "주제만 참고")
     create_render_placeholders("p1", draft, tmp_path)
     create_preview_media("p1", tmp_path)
+    create_subtitle_files("p1", tmp_path)
     status = build_render_export_status(tmp_path, "ready_for_upload_package", "GIF 확인 완료")
     assert status["status"] == "ready_for_upload_package_mp4_pending"
     assert status["assets"]["timeline_ready"] is True
     assert status["assets"]["gif_ready"] is True
+    assert status["assets"]["subtitles_ready"] is True
     assert status["assets"]["mp4_ready"] is False
     assert (tmp_path / "exports" / "manual_upload_package" / "render_export_status.json").exists()
+
+
+def test_render_export_blocks_without_subtitles_when_timing_exists(tmp_path) -> None:
+    draft = create_local_script_draft("자막 누락 테스트", "주제만 참고")
+    create_render_placeholders("p1", draft, tmp_path)
+    create_preview_media("p1", tmp_path)
+    status = build_render_export_status(tmp_path, "ready_for_upload_package", "자막 전 검토")
+    assert status["status"] == "needs_revision"
+    assert "subtitles_required_before_export" in status["blockers"]
 
 
 def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
@@ -184,6 +210,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     write_json(package_dir / "compliance_report.json", {"status": "pass"})
     write_json(package_dir / "asset_source_notes.json", {"sources": [], "assets": []})
     write_json(package_dir / "render_export_status.json", {"status": "ready_for_upload_package_mp4_pending"})
+    write_json(tmp_path / "renders" / "subtitles" / "subtitle_manifest.json", {"status": "subtitles_ready"})
     (package_dir / "title.txt").write_text("title", encoding="utf-8")
     (package_dir / "description.txt").write_text("description", encoding="utf-8")
     (package_dir / "tags.txt").write_text("tag", encoding="utf-8")
@@ -201,6 +228,15 @@ def test_project_dashboard_reports_first_blocking_gate(tmp_path) -> None:
     summary = summarize_project_gate(tmp_path)
     assert summary["blocking_gate"] == "project_review"
     assert "검토" in summary["next_step"]
+
+
+def test_project_dashboard_reports_subtitle_gate(tmp_path) -> None:
+    write_json(tmp_path / "project.json", {"status": "idea", "review": {"status": "approved_for_export"}})
+    write_json(tmp_path / "exports" / "manual_upload_package" / "compliance_report.json", {"status": "pass"})
+    write_json(tmp_path / "renders" / "placeholder" / "render_manifest.json", {"status": "review_package_ready"})
+    summary = summarize_project_gate(tmp_path)
+    assert summary["blocking_gate"] == "subtitles"
+    assert "SRT/VTT" in summary["next_step"]
 
 
 def test_weekly_plan_queue_marks_promoted_slot(tmp_path, monkeypatch) -> None:
