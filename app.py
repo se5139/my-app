@@ -7546,6 +7546,16 @@ WINDOWS_RESERVED_FILENAMES = {
     "LPT8",
     "LPT9",
 }
+WINDOWS_INVALID_FILENAME_CHARS = set('<>:"|?*')
+
+
+def image_has_transparency(image: Image.Image) -> bool:
+    if image.mode in {"RGBA", "LA"}:
+        alpha = image.getchannel("A")
+        return alpha.getextrema()[0] < 255
+    if image.mode == "P" and "transparency" in image.info:
+        return True
+    return False
 
 
 def validate_zip_entry_name(entry: str) -> list[str]:
@@ -7562,6 +7572,8 @@ def validate_zip_entry_name(entry: str) -> list[str]:
         problems.append("parent directory traversal")
     for part in parts:
         stem = part.split(".", 1)[0].upper()
+        if any(char in WINDOWS_INVALID_FILENAME_CHARS or ord(char) < 32 for char in part):
+            problems.append(f"invalid Windows filename character: {part}")
         if stem in WINDOWS_RESERVED_FILENAMES:
             problems.append(f"reserved Windows name: {part}")
         if part not in {".", ".."} and part.endswith((" ", ".")):
@@ -7569,7 +7581,12 @@ def validate_zip_entry_name(entry: str) -> list[str]:
     return problems
 
 
-def validate_image_file(path: Path, expected_format: str, expected_size: int = CANVAS_SIZE) -> list[dict[str, str]]:
+def validate_image_file(
+    path: Path,
+    expected_format: str,
+    expected_size: int = CANVAS_SIZE,
+    require_transparency: bool = False,
+) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     try:
         with Image.open(path) as image:
@@ -7595,6 +7612,14 @@ def validate_image_file(path: Path, expected_format: str, expected_size: int = C
                         "level": "warn",
                         "file": str(path),
                         "message": f"Image mode is {image.mode}; RGB/RGBA/P is safer for review.",
+                    }
+                )
+            if require_transparency and not image_has_transparency(image):
+                issues.append(
+                    {
+                        "level": "fail",
+                        "file": str(path),
+                        "message": "PNG must have a transparent background for Kakao submission review.",
                     }
                 )
     except Exception as exc:
@@ -7629,6 +7654,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
     webp_files = sorted(webp_dir.glob("*.webp"))
     preview_files = sorted(preview_dir.glob("*.jpg"))
     issues: list[dict[str, str]] = []
+    expected_preview_count = expected_static_count + expected_animated_count
 
     if len(static_files) != expected_static_count:
         issues.append(
@@ -7636,6 +7662,14 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
                 "level": "fail",
                 "file": str(static_dir),
                 "message": f"Static PNG count is {len(static_files)}, expected {expected_static_count} for {spec['label']}.",
+            }
+        )
+    if len(preview_files) != expected_preview_count:
+        issues.append(
+            {
+                "level": "fail",
+                "file": str(preview_dir),
+                "message": f"Preview JPG count is {len(preview_files)}, expected {expected_preview_count} for {spec['label']}.",
             }
         )
     if "webp" in allowed_extensions:
@@ -7657,7 +7691,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
         )
 
     for file_path in static_files:
-        issues.extend(validate_image_file(file_path, "PNG", canvas_px))
+        issues.extend(validate_image_file(file_path, "PNG", canvas_px, require_transparency=True))
         try:
             with Image.open(file_path) as image:
                 if image.size != (canvas_px, canvas_px):
@@ -7725,6 +7759,9 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
                 }
             )
 
+    for file_path in preview_files:
+        issues.extend(validate_image_file(file_path, "JPEG", canvas_px))
+
     if not zip_path.exists():
         issues.append({"level": "fail", "file": str(zip_path), "message": "Submit ZIP was not created."})
         zip_entries: list[str] = []
@@ -7787,7 +7824,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
         if unexpected_entries:
             issues.append(
                 {
-                    "level": "warn",
+                    "level": "fail",
                     "file": str(zip_path),
                     "message": f"Submit ZIP contains unexpected files: {len(unexpected_entries)}.",
                 }
@@ -7830,6 +7867,7 @@ def validate_output_package(output_dir: Path, product_mode: str = "standard_stat
             "static_png_count": expected_static_count,
             "animated_gif_count": expected_animated_count,
             "animated_webp_count": expected_animated_count if "webp" in allowed_extensions else 0,
+            "preview_jpg_count": expected_preview_count,
             "static_submission_target_bytes": static_target_bytes,
             "animated_submission_target_bytes": animated_target_bytes,
             "submit_zip_allows": list(allowed_extensions),
