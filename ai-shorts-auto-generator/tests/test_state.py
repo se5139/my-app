@@ -10,6 +10,7 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
+from ai_shorts.growth_learning import add_performance_record, recent_performance_records
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
@@ -183,3 +184,14 @@ def test_weekly_plan_queue_marks_promoted_slot(tmp_path, monkeypatch) -> None:
     updated = mark_slot_promoted("큐 테스트", "project-1")
     assert updated["slots"][0]["status"] == "promoted_to_draft"
     assert updated["slots"][0]["promoted_project_id"] == "project-1"
+
+
+def test_growth_learning_records_performance(tmp_path, monkeypatch) -> None:
+    from ai_shorts import growth_learning
+
+    monkeypatch.setattr(growth_learning, "PERFORMANCE_RECORDS_PATH", tmp_path / "performance_records.json")
+    record = add_performance_record("성과 테스트", views=1200, retention_pct=62.5, ctr_pct=7.2, avg_view_duration_sec=18, notes="hook good")
+    assert record["growth_score"] > 0
+    records = recent_performance_records()
+    assert records[0]["title"] == "성과 테스트"
+    assert (tmp_path / "performance_records.json").exists()

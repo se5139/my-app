@@ -301,6 +301,24 @@ Next recommended work:
 
 - Add a lightweight growth-learning import form so uploaded performance notes can feed future weekly scores.
 
+## 2026-06-10 Growth Learning Input Step
+
+Added lightweight growth-learning performance records:
+
+- `src/ai_shorts/growth_learning.py` stores records in `data/growth/performance_records.json`.
+- Home page now has a growth-learning form for title, project ID, views, retention, CTR, average watch time, and notes.
+- Each record receives a computed `growth_score` for future weekly planning.
+- Recent performance records are shown on the home page.
+
+Verification target:
+
+- Compile growth learning, web, and tests.
+- End-to-end submit the growth form and verify `performance_records.json` contains the record.
+
+Next recommended work:
+
+- Connect growth records to weekly planning so matching topics receive score boosts automatically.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

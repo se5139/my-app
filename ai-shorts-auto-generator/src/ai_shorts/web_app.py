@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .growth_learning import add_performance_record, recent_performance_records
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
@@ -44,6 +45,25 @@ def _read_project_file(project_id: str, filename: str, default: object) -> objec
     if project_id not in _known_project_ids():
         return default
     return read_json(PROJECTS_DIR / project_id / filename, default)
+
+
+def _growth_learning_summary(limit: int = 5) -> str:
+    records = recent_performance_records(limit)
+    if not records:
+        return '<div class="empty">아직 입력된 성과 기록이 없습니다.</div>'
+    rows = []
+    for record in records:
+        rows.append(
+            "<tr>"
+            f"<td>{_escape(record.get('title'))}</td>"
+            f"<td>{int(record.get('views', 0))}</td>"
+            f"<td>{_escape(record.get('retention_pct'))}%</td>"
+            f"<td>{_escape(record.get('ctr_pct'))}%</td>"
+            f"<td>{_escape(record.get('growth_score'))}</td>"
+            f"<td>{_escape(record.get('notes'))}</td>"
+            "</tr>"
+        )
+    return "<table><thead><tr><th>콘텐츠</th><th>조회수</th><th>유지율</th><th>CTR</th><th>성장 점수</th><th>메모</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
 
 
 def _latest_project_summary(limit: int = 8) -> str:
@@ -633,6 +653,45 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
       </form>
     </section>
 
+    <section class="band">
+      <h2>성장 학습 데이터</h2>
+      <form method="post" action="/growth-record">
+        <div class="grid two">
+          <div>
+            <label for="growth_title">콘텐츠 제목</label>
+            <input id="growth_title" name="title" required placeholder="예: 출근 전 5분 정리법">
+          </div>
+          <div>
+            <label for="growth_project_id">프로젝트 ID</label>
+            <input id="growth_project_id" name="project_id" placeholder="선택 사항">
+          </div>
+          <div>
+            <label for="growth_views">조회수</label>
+            <input id="growth_views" name="views" type="number" min="0" value="0">
+          </div>
+          <div>
+            <label for="growth_retention">평균 유지율 %</label>
+            <input id="growth_retention" name="retention_pct" type="number" min="0" max="100" step="0.1" value="0">
+          </div>
+          <div>
+            <label for="growth_ctr">CTR %</label>
+            <input id="growth_ctr" name="ctr_pct" type="number" min="0" max="100" step="0.1" value="0">
+          </div>
+          <div>
+            <label for="growth_duration">평균 시청 시간 초</label>
+            <input id="growth_duration" name="avg_view_duration_sec" type="number" min="0" step="0.1" value="0">
+          </div>
+        </div>
+        <label for="growth_notes">성과 메모</label>
+        <textarea id="growth_notes" name="notes" placeholder="예: 초반 3초 이탈이 많음, 제목은 잘 먹힘"></textarea>
+        <div class="actions">
+          <button type="submit">성과 기록 저장</button>
+          <span class="muted">저장된 기록은 다음 주간 계획 점수 개선에 사용할 수 있습니다.</span>
+        </div>
+      </form>
+      {_growth_learning_summary()}
+    </section>
+
     {result_html}
     {plan_html}
 
@@ -682,6 +741,18 @@ class Handler(BaseHTTPRequestHandler):
                 if project_id:
                     mark_slot_promoted(topic, project_id)
                 self._send(_render_page(result=result))
+                return
+            if self.path == "/growth-record":
+                add_performance_record(
+                    title=params.get("title", [""])[0],
+                    project_id=params.get("project_id", [""])[0],
+                    views=int(params.get("views", ["0"])[0] or 0),
+                    retention_pct=float(params.get("retention_pct", ["0"])[0] or 0),
+                    ctr_pct=float(params.get("ctr_pct", ["0"])[0] or 0),
+                    avg_view_duration_sec=float(params.get("avg_view_duration_sec", ["0"])[0] or 0),
+                    notes=params.get("notes", [""])[0],
+                )
+                self._send(_render_page())
                 return
             if self.path == "/review":
                 project_id = params.get("project_id", [""])[0]
