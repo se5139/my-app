@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
+from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
 from .weekly_planner import TopicInsight, create_weekly_plan
 from .workflow import (
@@ -53,15 +54,18 @@ def _latest_project_summary(limit: int = 8) -> str:
     for item in projects:
         project_id = item.get("id", "")
         package_dir = PROJECTS_DIR / project_id / "exports" / "manual_upload_package"
+        summary = summarize_project_gate(PROJECTS_DIR / project_id)
         rows.append(
             "<tr>"
             f"<td><a href=\"/project?id={_escape(project_id)}\">{_escape(item.get('title'))}</a></td>"
             f"<td><span class=\"status\">{_escape(item.get('status'))}</span></td>"
+            f"<td>{_escape(summary.get('blocking_gate'))}</td>"
+            f"<td>{_escape(summary.get('next_step'))}</td>"
             f"<td><code>{_escape(project_id[:8])}</code></td>"
             f"<td><code>{_escape(package_dir)}</code></td>"
             "</tr>"
         )
-    return "<table><thead><tr><th>초안</th><th>상태</th><th>ID</th><th>패키지 위치</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return "<table><thead><tr><th>초안</th><th>상태</th><th>현재 막힌 단계</th><th>다음 작업</th><th>ID</th><th>패키지 위치</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
 
 
 def _render_project_detail(project_id: str) -> str:

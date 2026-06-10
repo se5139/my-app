@@ -112,6 +112,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - ffmpeg setup guide export with Windows install and verification commands
 - render export review status for timeline, GIF preview, MP4 readiness, and manual upload packaging
 - final upload checklist that blocks manual upload readiness until MP4, compliance, review, metadata, and asset notes pass
+- project dashboard summary that shows the current blocking gate and next action for each draft
 
 ## Local Git Setup For This PC
 

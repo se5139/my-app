@@ -267,6 +267,23 @@ Next recommended work:
 
 - Add a dashboard summary that shows all projects and their current blocking gate.
 
+## 2026-06-10 Project Dashboard Gate Summary Step
+
+Added home dashboard gate summary:
+
+- `src/ai_shorts/project_dashboard.py` computes the first blocking gate for each project.
+- The home page recent-project table now shows current blocking gate and next action.
+- Gate order is project review, compliance, render plan, GIF preview, MP4, render export, and final upload checklist.
+
+Verification target:
+
+- Compile project dashboard, web, and tests.
+- Create a draft through the web route and verify the home page shows the blocking gate summary.
+
+Next recommended work:
+
+- Add weekly planner-to-draft queue so 2 to 3 planned topics can be promoted into saved drafts.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

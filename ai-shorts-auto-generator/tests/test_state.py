@@ -10,6 +10,7 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
+from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
 
@@ -161,3 +162,10 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert "mp4_present" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()
+
+
+def test_project_dashboard_reports_first_blocking_gate(tmp_path) -> None:
+    write_json(tmp_path / "project.json", {"status": "idea", "review": {"status": "needs_review"}})
+    summary = summarize_project_gate(tmp_path)
+    assert summary["blocking_gate"] == "project_review"
+    assert "검토" in summary["next_step"]
