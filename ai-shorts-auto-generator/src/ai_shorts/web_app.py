@@ -6,12 +6,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .api_keys import API_KEY_FIELDS, api_key_status, save_api_keys
 from .environment_check import collect_environment_check
 from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
 from .handoff_report import create_handoff_report, list_handoff_reports, read_handoff_report
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
+from .production_readiness import build_production_readiness
 from .project_dashboard import summarize_project_gate
 from .restore_guide import restore_steps
 from .state import read_json, update_project_review
@@ -119,6 +121,82 @@ def _environment_check_html() -> str:
       <p>전체 상태 <span class="status">{_escape(report.get('overall_status'))}</span></p>
       <p class="muted">다른 PC에서 이어받을 때 필요한 Python, Git, data 폴더, ffmpeg 상태를 읽기 전용으로 확인합니다.</p>
       <table><thead><tr><th>항목</th><th>상태</th><th>설명</th><th>위치/조치</th></tr></thead><tbody>{rows}</tbody></table>
+    </section>
+    """
+
+
+def _production_readiness_html() -> str:
+    report = build_production_readiness()
+    gate_rows = "".join(
+        f"<tr><td>{_escape(gate)}</td><td>{count}</td></tr>"
+        for gate, count in report.get("gate_counts", {}).items()
+    )
+    if not gate_rows:
+        gate_rows = '<tr><td colspan="2" class="muted">아직 초안 프로젝트가 없습니다.</td></tr>'
+    api_rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('label'))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('configured'))}</span></td>"
+        f"<td><code>{_escape(item.get('masked'))}</code></td>"
+        "</tr>"
+        for item in report.get("api_keys", [])
+    )
+    blockers = ", ".join(report.get("blockers", [])) or "none"
+    return f"""
+    <section class="band">
+      <h2>제작 준비도</h2>
+      <p>전체 상태 <span class="status">{_escape(report.get('overall_status'))}</span> · 초안 {int(report.get('project_count', 0))}개 · 업로드 준비 {int(report.get('ready_project_count', 0))}개</p>
+      <p class="muted">성장 데이터 {int(report.get('growth_record_count', 0))}개 · API 키 {int(report.get('api_configured_count', 0))}/{int(report.get('api_total_count', 0))}개 · blockers: {_escape(blockers)}</p>
+      <p>{_escape(report.get('next_step'))}</p>
+      <div class="grid two">
+        <div>
+          <label>제작 게이트</label>
+          <table><thead><tr><th>게이트</th><th>초안 수</th></tr></thead><tbody>{gate_rows}</tbody></table>
+        </div>
+        <div>
+          <label>API 키 상태</label>
+          <table><thead><tr><th>키</th><th>상태</th><th>표시</th></tr></thead><tbody>{api_rows}</tbody></table>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _api_key_setup_html(api_result: dict | None = None) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{_escape(item.get('label'))}</td>"
+        f"<td><span class=\"status\">{_escape(item.get('configured'))}</span></td>"
+        f"<td><code>{_escape(item.get('masked'))}</code></td>"
+        "</tr>"
+        for item in api_key_status()
+    )
+    inputs = "".join(
+        f"""
+        <div>
+          <label for="{field['name']}">{_escape(field['label'])}</label>
+          <input id="{field['name']}" name="{field['name']}" type="password" autocomplete="off" placeholder="비워두면 기존 값 유지">
+        </div>
+        """
+        for field in API_KEY_FIELDS
+    )
+    result_html = ""
+    if api_result:
+        updated = ", ".join(api_result.get("updated", [])) or "none"
+        result_html = f'<p class="muted">저장 완료: <code>{_escape(updated)}</code></p>'
+    return f"""
+    <section class="band">
+      <h2>API 키 준비</h2>
+      <p class="muted">키 원문은 로컬 data/secrets에만 저장하고 화면에는 마스킹 상태만 표시합니다. 이 폴더는 Git과 운영 스냅샷에서 제외됩니다.</p>
+      {result_html}
+      <form method="post" action="/api-keys">
+        <div class="grid two">{inputs}</div>
+        <div class="actions">
+          <button class="secondary" type="submit">API 키 저장</button>
+          <span class="muted">Gemini, YouTube, Naver, Kakao 연동 준비용입니다.</span>
+        </div>
+      </form>
+      <table><thead><tr><th>키</th><th>상태</th><th>표시</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
     """
 
@@ -599,6 +677,7 @@ def _render_page(
     snapshot: dict | None = None,
     setup_guides: dict | None = None,
     handoff_report: dict | None = None,
+    api_result: dict | None = None,
     error: str = "",
     detail_html: str = "",
 ) -> bytes:
@@ -837,6 +916,8 @@ def _render_page(
     {error_html}
     {detail_html}
     {_environment_check_html()}
+    {_production_readiness_html()}
+    {_api_key_setup_html(api_result)}
     {_first_run_checklist_html()}
     <section class="band">
       <h2>새 쇼츠 초안</h2>
@@ -1040,6 +1121,10 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/growth-csv-import":
                 growth_import = import_performance_csv(params.get("csv_text", [""])[0])
                 self._send(_render_page(growth_import=growth_import))
+                return
+            if self.path == "/api-keys":
+                api_result = save_api_keys({field["name"]: params.get(field["name"], [""])[0] for field in API_KEY_FIELDS})
+                self._send(_render_page(api_result=api_result))
                 return
             if self.path == "/operations-snapshot":
                 snapshot = create_operations_snapshot()

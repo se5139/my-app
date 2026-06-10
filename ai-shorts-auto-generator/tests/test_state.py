@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import zipfile
+
+from ai_shorts.api_keys import api_key_status, save_api_keys
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
@@ -15,6 +18,7 @@ from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
 from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.operations_snapshot import create_operations_snapshot
+from ai_shorts.production_readiness import build_production_readiness
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.restore_guide import new_pc_start_markdown, restore_steps
 from ai_shorts.state import write_json
@@ -90,6 +94,8 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "생성된 가이드 보기" in html
     assert "handoff 보고서" in html
     assert "생성된 보고서 보기" in html
+    assert "제작 준비도" in html
+    assert "API 키 준비" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -265,6 +271,26 @@ def test_operations_snapshot_creates_zip(tmp_path, monkeypatch) -> None:
     assert (data_dir / "snapshots").exists()
 
 
+def test_operations_snapshot_excludes_local_secrets(tmp_path, monkeypatch) -> None:
+    from ai_shorts import operations_snapshot, paths
+
+    data_dir = tmp_path / "data"
+    projects_dir = data_dir / "projects"
+    monkeypatch.setattr(paths, "DATA_DIR", data_dir)
+    monkeypatch.setattr(paths, "PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(operations_snapshot, "DATA_DIR", data_dir)
+    monkeypatch.setattr(operations_snapshot, "PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(operations_snapshot, "SNAPSHOT_DIR", data_dir / "snapshots")
+    monkeypatch.setattr(operations_snapshot, "SECRETS_DIR", data_dir / "secrets")
+    write_json(data_dir / "app_state.json", {"projects": []})
+    write_json(data_dir / "secrets" / "api_keys.json", {"keys": {"gemini_api_key": "secret"}})
+
+    snapshot = create_operations_snapshot()
+    with zipfile.ZipFile(snapshot["zip_path"]) as archive:
+        names = archive.namelist()
+    assert not any("secrets" in name for name in names)
+
+
 def test_restore_guide_has_repo_and_snapshot_steps() -> None:
     steps = restore_steps()
     markdown = new_pc_start_markdown({"project_count": 1})
@@ -278,6 +304,43 @@ def test_environment_check_reports_core_items() -> None:
     names = {item["name"] for item in report["checks"]}
     assert {"Python", "Git", "Data folder", "Projects", "FFmpeg"}.issubset(names)
     assert report["overall_status"] in {"ready", "usable_with_warnings", "needs_setup"}
+
+
+def test_api_keys_save_and_mask_status(tmp_path, monkeypatch) -> None:
+    from ai_shorts import api_keys
+
+    monkeypatch.setattr(api_keys, "SECRETS_DIR", tmp_path / "secrets")
+    monkeypatch.setattr(api_keys, "API_KEYS_PATH", tmp_path / "secrets" / "api_keys.json")
+    result = save_api_keys(
+        {
+            "gemini_api_key": "gemini-secret-1234",
+            "youtube_api_key": "youtube-secret-1234",
+            "naver_client_id": "naver-client-id",
+            "naver_client_secret": "naver-client-secret",
+            "kakao_rest_api_key": "kakao-secret-1234",
+        }
+    )
+    status = api_key_status()
+    assert len(result["updated"]) == 5
+    assert all(item["configured"] == "yes" for item in status)
+    assert all("secret-1234" not in item["masked"] for item in status)
+
+
+def test_production_readiness_reports_api_and_growth_state(tmp_path, monkeypatch) -> None:
+    from ai_shorts import api_keys, growth_learning, paths, production_readiness
+
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(paths, "APP_STATE_PATH", data_dir / "app_state.json")
+    monkeypatch.setattr(paths, "PROJECTS_DIR", data_dir / "projects")
+    monkeypatch.setattr(api_keys, "API_KEYS_PATH", data_dir / "secrets" / "api_keys.json")
+    monkeypatch.setattr(production_readiness, "APP_STATE_PATH", data_dir / "app_state.json")
+    monkeypatch.setattr(production_readiness, "PROJECTS_DIR", data_dir / "projects")
+    monkeypatch.setattr(growth_learning, "PERFORMANCE_RECORDS_PATH", data_dir / "growth" / "performance_records.json")
+    write_json(data_dir / "app_state.json", {"projects": []})
+
+    report = build_production_readiness()
+    assert report["overall_status"] == "needs_work"
+    assert "api_keys_incomplete" in report["blockers"]
 
 
 def test_first_run_setup_turns_environment_into_actions() -> None:

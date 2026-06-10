@@ -11,6 +11,7 @@ from .state import now_iso, read_json, write_json
 
 
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
+SECRETS_DIR = DATA_DIR / "secrets"
 
 
 def create_operations_snapshot() -> dict[str, Any]:
@@ -75,6 +76,8 @@ def _iter_snapshot_files() -> list[Path]:
         if not file_path.is_file():
             continue
         if SNAPSHOT_DIR in file_path.parents:
+            continue
+        if SECRETS_DIR in file_path.parents:
             continue
         files.append(file_path)
     return files

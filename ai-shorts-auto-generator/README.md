@@ -126,6 +126,8 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - setup guide index/detail viewer for reading generated Markdown inside the web UI
 - one-click handoff report that combines environment status, checklist, latest snapshot, and setup guide links
 - handoff report index/detail viewer for reading generated reports inside the web UI
+- production readiness dashboard for drafts, upload gates, growth data, and API key status
+- local API key setup for Gemini, YouTube, Naver Client ID/Secret, and Kakao REST API key under ignored `data/secrets`
 
 ## New PC Restore Guide
 

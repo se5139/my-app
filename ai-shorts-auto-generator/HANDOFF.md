@@ -506,6 +506,24 @@ Next recommended work:
 
 - Add a production-readiness dashboard that summarizes content pipeline readiness beyond setup: drafts, reviews, renders, upload gates, and growth data.
 
+## 2026-06-10 Production Readiness And API Key Prep Step
+
+Added production readiness and local API key preparation:
+
+- `src/ai_shorts/production_readiness.py` summarizes drafts, gate blockers, growth data, and API key readiness.
+- `src/ai_shorts/api_keys.py` stores Gemini, YouTube, Naver Client ID/Secret, and Kakao REST API key values under local `data/secrets`.
+- `.gitignore` now ignores `data/`, and operations snapshots exclude `data/secrets`.
+- The home page now shows `제작 준비도` and `API 키 준비` sections.
+
+Verification target:
+
+- Compile API key, production readiness, snapshot, web app, and tests.
+- Smoke-test local API key save/masking and confirm snapshots exclude secrets.
+
+Next recommended work:
+
+- Add connector-specific readiness pages for Gemini generation, YouTube collection, Naver search, and Kakao API smoke checks without exposing keys.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
