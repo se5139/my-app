@@ -4137,11 +4137,16 @@ def release_allowlist_files() -> list[Path]:
 def release_excluded_summary(included_files: list[Path]) -> dict[str, int]:
     included = {path.resolve() for path in included_files}
     summary: dict[str, int] = {}
-    for item in Path(".").rglob("*"):
-        if not item.is_file() or item.resolve() in included:
+    for item in Path(".").iterdir():
+        if item.resolve() in included:
             continue
-        reason = release_exclusion_reason(item) or "v100 portable 핵심 구성 외 파일 제외"
-        summary[reason] = summary.get(reason, 0) + 1
+        if item.is_dir():
+            reason = release_exclusion_reason(item) or "v100 portable 핵심 구성 외 폴더 제외"
+            summary[reason] = summary.get(reason, 0) + 1
+            continue
+        if item.is_file():
+            reason = release_exclusion_reason(item) or "v100 portable 핵심 구성 외 파일 제외"
+            summary[reason] = summary.get(reason, 0) + 1
     return summary
 
 

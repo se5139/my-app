@@ -1,10 +1,10 @@
 Kakao Emoticon Maker - 다른 PC 실행 순서
 
-방법 1. GitHub에서 바로 이어가기
+방법 1. GitHub 저장소에서 이어가기
 
 1. 새 PC에 Git과 Python 3.10 이상을 설치합니다.
-2. 명령 프롬프트 또는 PowerShell을 엽니다.
-3. 아래 명령을 실행합니다.
+2. PowerShell 또는 명령 프롬프트를 엽니다.
+3. 원하는 폴더에서 아래 명령을 실행합니다.
 
    git clone https://github.com/se5139/my-app.git kakao-emoticon
    cd kakao-emoticon
@@ -21,12 +21,18 @@ Kakao Emoticon Maker - 다른 PC 실행 순서
    release/kakao_emoticon_v100_clean_latest.zip
 
 2. ZIP을 원하는 위치에 압축 해제합니다.
-3. 압축 해제된 폴더에서 START_HERE.bat을 실행합니다.
-4. 문제가 있으면 VERIFY_PACKAGE.bat을 먼저 실행한 뒤 START_WINDOWS.bat을 실행합니다.
+3. 압축 해제한 폴더에서 START_HERE.bat를 실행합니다.
+4. 문제가 있으면 VERIFY_PACKAGE.bat를 먼저 실행한 뒤 START_WINDOWS.bat를 실행합니다.
+
+작업 상태까지 옮기기
+
+1. 기존 PC에서 EXPORT_SYNC_STATE.bat를 실행합니다.
+2. 생성된 sync_state_export_latest.zip을 새 PC로 옮깁니다.
+3. 새 PC에서 IMPORT_SYNC_STATE.bat를 실행합니다.
 
 주의
 
-- 첫 실행에는 Python 가상환경을 만들고 Pillow를 설치하므로 인터넷 연결이 필요할 수 있습니다.
-- API 키가 없어도 기본 제작, 검수, 자료 메모 분석 기능은 사용할 수 있습니다.
+- 처음 실행할 때는 Python 가상환경을 만들고 Pillow를 설치하므로 인터넷 연결이 필요할 수 있습니다.
+- API 키가 없어도 기본 제작, 검수, 엑셀 분석, 대시보드 기능은 사용할 수 있습니다.
 - 생성 결과물은 outputs 폴더에 저장됩니다.
-- 다른 PC로 최근 작업 결과와 메모리까지 옮기려면 기존 PC에서 EXPORT_SYNC_STATE.bat을 실행하고, 새 PC에서 IMPORT_SYNC_STATE.bat을 실행합니다.
+- API 키, .env, 캐시, 로그 파일은 저장소와 배포 ZIP에 포함하지 않습니다.

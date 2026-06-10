@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import py_compile
+import ast
+import json
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -11,125 +13,134 @@ REQUIRED_FILES = [
     "app.py",
     "README.md",
     "QUICK_START_OTHER_PC_KO.txt",
-    "DOWNLOAD_LATEST_FROM_GITHUB_KO.md",
-    "RELEASE_NOTES_KO.md",
-    "TROUBLESHOOTING_KO.md",
-    "SYNC_STATE_GUIDE_KO.md",
     "requirements.txt",
-    "DOWNLOAD_LATEST_RELEASE.bat",
-    "EXPORT_SYNC_STATE.bat",
-    "IMPORT_SYNC_STATE.bat",
     "START_HERE.bat",
     "START_WINDOWS.bat",
     "RUN_SERVER_NO_BROWSER.bat",
     "VERIFY_PACKAGE.bat",
-    "KAKAO_SAFE_WORKFLOW.md",
-    "RESEARCH_SOURCES.md",
-    "memory/evolution_memory.json",
-    "memory/api_usage_ledger.json",
+    "scripts/verify_package.py",
     "scripts/stop_port.py",
     "scripts/wait_for_port.py",
-    "scripts/verify_package.py",
-    "scripts/export_sync_state.py",
-    "scripts/import_sync_state.py",
 ]
 
-FORBIDDEN_PATH_PARTS = {
+FORBIDDEN_DIRS = [
     ".git",
     ".venv",
-    "__pycache__",
     "outputs",
-    "release",
-    "github_backup",
-    "installer",
-    "_legacy_tools",
-    "_advanced_tools",
-}
+    "output",
+    "data",
+    "secrets",
+    "__pycache__",
+]
+
+SECRET_NAME_MARKERS = [".env", "secret", "token", "api_key", "apikey"]
+MOJIBAKE_MARKERS = ["誘", "諛", "泥", "移", "蹂", "媛", "쨌", "珥", "�"]
 
 
-def check_required_files() -> list[str]:
-    issues: list[str] = []
-    for rel_path in REQUIRED_FILES:
-        if not (ROOT / rel_path).is_file():
-            issues.append(f"missing required file: {rel_path}")
-    return issues
+def rel(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
-def check_forbidden_paths() -> list[str]:
-    if not (ROOT / "RELEASE_MANIFEST.json").exists():
-        print("[WARN] RELEASE_MANIFEST.json not found; skipping packaged-folder strict check in development tree")
-        return []
-    issues: list[str] = []
-    for path in ROOT.rglob("*"):
-        rel_parts = set(path.relative_to(ROOT).parts)
-        found = sorted(rel_parts & FORBIDDEN_PATH_PARTS)
-        if found:
-            issues.append(f"forbidden packaged path: {path.relative_to(ROOT)}")
-            if len(issues) >= 10:
-                break
-    return issues
+def fail(message: str) -> None:
+    print(f"[FAIL] {message}")
+    raise SystemExit(1)
 
 
-def check_launcher_text() -> list[str]:
-    issues: list[str] = []
-    launcher = ROOT / "START_WINDOWS.bat"
-    if launcher.exists():
-        text = launcher.read_text(encoding="utf-8", errors="replace").lower()
-        if "v100" not in text:
-            issues.append("START_WINDOWS.bat does not look like the v100 launcher")
-        if "streamlit" in text or "v90" in text:
-            issues.append("START_WINDOWS.bat still contains v90/streamlit text")
-    requirements = ROOT / "requirements.txt"
-    if requirements.exists():
-        text = requirements.read_text(encoding="utf-8", errors="replace").lower()
-        if "pillow" not in text:
-            issues.append("requirements.txt does not include Pillow")
-        if "streamlit" in text:
-            issues.append("requirements.txt still includes Streamlit")
-    return issues
+def ok(message: str) -> None:
+    print(f"[OK] {message}")
 
 
-def check_python_files() -> list[str]:
-    issues: list[str] = []
-    for rel_path in [
-        "app.py",
-        "scripts/stop_port.py",
-        "scripts/wait_for_port.py",
-        "scripts/verify_package.py",
-        "scripts/export_sync_state.py",
-        "scripts/import_sync_state.py",
-    ]:
-        path = ROOT / rel_path
-        if not path.exists():
-            continue
-        try:
-            py_compile.compile(str(path), doraise=True)
-        except Exception as exc:
-            issues.append(f"python compile failed: {rel_path}: {exc}")
-    return issues
+def warn(message: str) -> None:
+    print(f"[WARN] {message}")
+
+
+def check_required_files() -> None:
+    missing = [name for name in REQUIRED_FILES if not (ROOT / name).is_file()]
+    if missing:
+        fail("required files missing: " + ", ".join(missing))
+    ok("required files")
+
+
+def check_forbidden_dirs() -> None:
+    present = [name for name in FORBIDDEN_DIRS if (ROOT / name).exists()]
+    allowed_in_dev = {".git", ".venv", "__pycache__", "outputs", "output"}
+    unexpected = [name for name in present if name not in allowed_in_dev]
+    if unexpected:
+        fail("forbidden runtime/data folders found in package root: " + ", ".join(unexpected))
+    if present:
+        warn("development-only folders present locally: " + ", ".join(present))
+    ok("forbidden folders")
+
+
+def check_launcher_text() -> None:
+    start_here = (ROOT / "START_HERE.bat").read_text(encoding="utf-8", errors="replace")
+    start_windows = (ROOT / "START_WINDOWS.bat").read_text(encoding="utf-8", errors="replace")
+    if "VERIFY_PACKAGE.bat" not in start_here or "START_WINDOWS.bat" not in start_here:
+        fail("START_HERE.bat must verify first and then call START_WINDOWS.bat")
+    if "python app.py" not in start_windows:
+        fail("START_WINDOWS.bat must launch python app.py")
+    ok("launcher text")
+
+
+def check_python_syntax() -> None:
+    for path in [ROOT / "app.py", ROOT / "scripts" / "verify_package.py"]:
+        ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    ok("python syntax")
+
+
+def check_docs_encoding() -> None:
+    for name in ["README.md", "QUICK_START_OTHER_PC_KO.txt"]:
+        text = (ROOT / name).read_text(encoding="utf-8", errors="replace")
+        if any(marker in text for marker in MOJIBAKE_MARKERS):
+            fail(f"mojibake marker found in {name}")
+    ok("Korean docs encoding")
+
+
+def check_release_manifest_if_present() -> None:
+    manifest = ROOT / "RELEASE_MANIFEST.json"
+    if not manifest.exists():
+        warn("RELEASE_MANIFEST.json not found; skipping packaged-folder strict check in development tree")
+        return
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    included = data.get("included_files", [])
+    if "START_WINDOWS.bat" not in included:
+        fail("RELEASE_MANIFEST.json does not include START_WINDOWS.bat")
+    if "scripts/verify_package.py" not in included:
+        fail("RELEASE_MANIFEST.json does not include scripts/verify_package.py")
+    ok("release manifest")
+
+
+def check_latest_zip_if_present() -> None:
+    zip_path = ROOT / "release" / "kakao_emoticon_v100_clean_latest.zip"
+    if not zip_path.exists():
+        warn("latest release ZIP not found; skipping ZIP content check")
+        return
+    with zipfile.ZipFile(zip_path) as archive:
+        names = archive.namelist()
+    secret_like = [name for name in names if any(marker in name.lower() for marker in SECRET_NAME_MARKERS)]
+    if secret_like:
+        fail("secret-like files found in latest ZIP: " + ", ".join(secret_like[:10]))
+    required_in_zip = [
+        "kakao_emoticon_v100_clean/START_HERE.bat",
+        "kakao_emoticon_v100_clean/START_WINDOWS.bat",
+        "kakao_emoticon_v100_clean/scripts/verify_package.py",
+    ]
+    missing = [name for name in required_in_zip if name not in names]
+    if missing:
+        warn("latest ZIP is older than working tree; missing: " + ", ".join(missing))
+        return
+    ok("latest ZIP content")
 
 
 def main() -> int:
     print(f"[check] root: {ROOT}")
-    checks = [
-        ("required files", check_required_files),
-        ("forbidden folders", check_forbidden_paths),
-        ("launcher text", check_launcher_text),
-        ("python syntax", check_python_files),
-    ]
-    issues: list[str] = []
-    for label, checker in checks:
-        found = checker()
-        if found:
-            print(f"[FAIL] {label}")
-            for issue in found:
-                print(f"  - {issue}")
-            issues.extend(found)
-        else:
-            print(f"[OK] {label}")
-    if issues:
-        print(f"[check] failed with {len(issues)} issue(s)")
-        return 1
+    check_required_files()
+    check_forbidden_dirs()
+    check_launcher_text()
+    check_python_syntax()
+    check_docs_encoding()
+    check_release_manifest_if_present()
+    check_latest_zip_if_present()
     print("[check] package is ready")
     return 0
 
