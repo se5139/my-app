@@ -67,7 +67,7 @@ def _workflow_status(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
         gate_counts["draft"] += 1
         if gate in {"project_review", "compliance"}:
             gate_counts["review"] += 1
-        elif gate in {"render_plan", "gif_preview", "mp4", "render_export"}:
+        elif gate in {"render_plan", "subtitles", "audio", "gif_preview", "mp4", "render_export"}:
             gate_counts["render"] += 1
         elif gate in {"final_upload", "complete"}:
             gate_counts["upload_gate"] += 1

@@ -29,6 +29,7 @@ from .workflow import (
     generate_preview_render,
     generate_subtitle_export,
     package_final_media,
+    prepare_audio_assets,
     update_final_upload_checklist,
     update_render_export_review,
     update_draft_script,
@@ -410,6 +411,7 @@ def _render_project_detail(project_id: str) -> str:
     render_dir = PROJECTS_DIR / project_id / "renders" / "placeholder"
     preview_dir = PROJECTS_DIR / project_id / "renders" / "preview"
     subtitle_dir = PROJECTS_DIR / project_id / "renders" / "subtitles"
+    audio_dir = PROJECTS_DIR / project_id / "renders" / "audio"
     compliance = read_json(package_dir / "compliance_report.json", {})
     render_export_status = read_json(package_dir / "render_export_status.json", {})
     final_upload_checklist = read_json(package_dir / "final_upload_checklist.json", {})
@@ -418,6 +420,7 @@ def _render_project_detail(project_id: str) -> str:
     render_plan = read_json(render_dir / "render_plan.json", {})
     timing_plan = read_json(render_dir / "timing_plan.json", {})
     subtitle_manifest = read_json(subtitle_dir / "subtitle_manifest.json", {})
+    audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_info = read_json(preview_dir / "mp4_status.json", {})
     ffmpeg_guide = read_json(preview_dir / "ffmpeg_setup_guide.json", {})
@@ -499,6 +502,14 @@ def _render_project_detail(project_id: str) -> str:
     subtitle_issue_text = ", ".join(str(item) for item in subtitle_issues) if subtitle_issues else "없음"
     subtitle_srt = subtitle_manifest.get("srt_path", "") if isinstance(subtitle_manifest, dict) else ""
     subtitle_vtt = subtitle_manifest.get("vtt_path", "") if isinstance(subtitle_manifest, dict) else ""
+    audio_status = audio_manifest.get("status", "not_created") if isinstance(audio_manifest, dict) else "not_created"
+    audio_validation = audio_manifest.get("validation", {}) if isinstance(audio_manifest, dict) else {}
+    audio_issues = audio_validation.get("issues", []) if isinstance(audio_validation, dict) else []
+    audio_issue_text = ", ".join(str(item) for item in audio_issues) if audio_issues else "없음"
+    audio_voice = audio_manifest.get("voice", {}) if isinstance(audio_manifest, dict) else {}
+    audio_bgm = audio_manifest.get("bgm", {}) if isinstance(audio_manifest, dict) else {}
+    audio_mix = audio_manifest.get("mix", {}) if isinstance(audio_manifest, dict) else {}
+    audio_next_step = audio_manifest.get("next_step", "로컬 음성 파일과 출처 메모를 등록하세요.") if isinstance(audio_manifest, dict) else "로컬 음성 파일과 출처 메모를 등록하세요."
     preview_gif = preview_manifest.get("preview_gif", "") if isinstance(preview_manifest, dict) else ""
     preview_rows = "".join(
         "<tr>"
@@ -685,6 +696,69 @@ def _render_project_detail(project_id: str) -> str:
         <div>
           <label>VTT 파일</label>
           <p><code>{_escape(subtitle_vtt or '아직 생성되지 않았습니다.')}</code></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>오디오/음성 게이트</h2>
+      <p class="muted">로컬 음성, BGM, 효과음 파일만 등록합니다. 유료 TTS/API 생성과 실제 업로드는 실행하지 않습니다.</p>
+      <form method="post" action="/audio-assets">
+        <input type="hidden" name="project_id" value="{_escape(project_id)}">
+        <div class="grid two">
+          <div>
+            <label for="voice_path">음성 파일 경로</label>
+            <input id="voice_path" name="voice_path" placeholder="예: C:\\work\\voice.wav">
+          </div>
+          <div>
+            <label for="voice_source_note">음성 출처/생성 방식</label>
+            <input id="voice_source_note" name="voice_source_note" placeholder="예: 직접 녹음, 무료 TTS 로컬 생성">
+          </div>
+          <div>
+            <label for="voice_duration_sec">음성 길이(초, wav가 아니면 입력)</label>
+            <input id="voice_duration_sec" name="voice_duration_sec" placeholder="예: 45">
+          </div>
+          <div>
+            <label for="bgm_path">BGM 파일 경로</label>
+            <input id="bgm_path" name="bgm_path" placeholder="선택 사항">
+          </div>
+          <div>
+            <label for="bgm_source_note">BGM 출처/라이선스 메모</label>
+            <input id="bgm_source_note" name="bgm_source_note" placeholder="예: 직접 제작, 상업 이용 가능 음원">
+          </div>
+          <div>
+            <label for="bgm_volume_pct">BGM 볼륨 %</label>
+            <input id="bgm_volume_pct" name="bgm_volume_pct" value="18">
+          </div>
+          <div>
+            <label for="sfx_paths">효과음 파일 경로</label>
+            <textarea id="sfx_paths" name="sfx_paths" placeholder="한 줄에 하나씩 입력"></textarea>
+          </div>
+          <div>
+            <label for="sfx_source_note">효과음 출처/라이선스 메모</label>
+            <textarea id="sfx_source_note" name="sfx_source_note" placeholder="예: 직접 제작, 상업 이용 가능 효과음"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">오디오 게이트 실행</button>
+          <span class="muted">상태: {_escape(audio_status)} · 검증 이슈: {_escape(audio_issue_text)}</span>
+        </div>
+      </form>
+      <div class="grid three">
+        <div>
+          <label>음성</label>
+          <p><code>{_escape(audio_voice.get('copied_path', '') if isinstance(audio_voice, dict) else '')}</code></p>
+          <p class="muted">길이: {_escape(audio_voice.get('duration_sec', 0) if isinstance(audio_voice, dict) else 0)}초</p>
+        </div>
+        <div>
+          <label>BGM</label>
+          <p><code>{_escape(audio_bgm.get('copied_path', '') if isinstance(audio_bgm, dict) else '')}</code></p>
+          <p class="muted">볼륨: {_escape(audio_bgm.get('volume_pct', 18) if isinstance(audio_bgm, dict) else 18)}%</p>
+        </div>
+        <div>
+          <label>믹싱 정책</label>
+          <p>{_escape(audio_next_step)}</p>
+          <p class="muted">유료 API 호출: {_escape(not audio_mix.get('no_paid_api_calls', True) if isinstance(audio_mix, dict) else False)}</p>
         </div>
       </div>
     </section>
@@ -1383,6 +1457,24 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/subtitle-export":
                 project_id = params.get("project_id", [""])[0]
                 generate_subtitle_export(project_id)
+                detail_html = _render_project_detail(project_id)
+                self._send(_render_page(detail_html=detail_html))
+                return
+            if self.path == "/audio-assets":
+                project_id = params.get("project_id", [""])[0]
+                prepare_audio_assets(
+                    project_id,
+                    {
+                        "voice_path": params.get("voice_path", [""])[0],
+                        "voice_source_note": params.get("voice_source_note", [""])[0],
+                        "voice_duration_sec": params.get("voice_duration_sec", [""])[0],
+                        "bgm_path": params.get("bgm_path", [""])[0],
+                        "bgm_source_note": params.get("bgm_source_note", [""])[0],
+                        "bgm_volume_pct": params.get("bgm_volume_pct", ["18"])[0],
+                        "sfx_paths": params.get("sfx_paths", [""])[0],
+                        "sfx_source_note": params.get("sfx_source_note", [""])[0],
+                    },
+                )
                 detail_html = _render_project_detail(project_id)
                 self._send(_render_page(detail_html=detail_html))
                 return

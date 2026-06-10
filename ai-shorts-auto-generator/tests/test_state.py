@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import subprocess
+import wave
 import zipfile
 
+from ai_shorts.audio_assets import build_audio_asset_manifest
 from ai_shorts.api_keys import api_connector_readiness, api_key_status, save_api_keys
 from ai_shorts.api_smoke_check import run_api_smoke_check
 from ai_shorts.cost_guard import cost_guard_summary, evaluate_api_call, save_cost_guard
@@ -214,11 +216,14 @@ def test_render_export_status_records_review_assets(tmp_path) -> None:
     create_render_placeholders("p1", draft, tmp_path)
     create_preview_media("p1", tmp_path)
     create_subtitle_files("p1", tmp_path)
+    voice_path = _write_silent_wav(tmp_path / "voice.wav", 45)
+    build_audio_asset_manifest(tmp_path, {"voice_path": str(voice_path), "voice_source_note": "직접 녹음"})
     status = build_render_export_status(tmp_path, "ready_for_upload_package", "GIF 확인 완료")
     assert status["status"] == "ready_for_upload_package_mp4_pending"
     assert status["assets"]["timeline_ready"] is True
     assert status["assets"]["gif_ready"] is True
     assert status["assets"]["subtitles_ready"] is True
+    assert status["assets"]["audio_ready"] is True
     assert status["assets"]["mp4_ready"] is False
     assert (tmp_path / "exports" / "manual_upload_package" / "render_export_status.json").exists()
 
@@ -230,6 +235,29 @@ def test_render_export_blocks_without_subtitles_when_timing_exists(tmp_path) -> 
     status = build_render_export_status(tmp_path, "ready_for_upload_package", "자막 전 검토")
     assert status["status"] == "needs_revision"
     assert "subtitles_required_before_export" in status["blockers"]
+
+
+def test_audio_asset_manifest_validates_local_voice_and_bgm(tmp_path) -> None:
+    draft = create_local_script_draft("오디오 테스트", "주제만 참고", target_duration_sec=30)
+    create_render_placeholders("p1", draft, tmp_path)
+    voice_path = _write_silent_wav(tmp_path / "voice.wav", 30)
+    bgm_path = _write_silent_wav(tmp_path / "bgm.wav", 30)
+
+    manifest = build_audio_asset_manifest(
+        tmp_path,
+        {
+            "voice_path": str(voice_path),
+            "voice_source_note": "직접 녹음",
+            "bgm_path": str(bgm_path),
+            "bgm_source_note": "직접 제작",
+            "bgm_volume_pct": 18,
+        },
+    )
+
+    assert manifest["status"] == "audio_ready"
+    assert manifest["mix"]["no_paid_api_calls"] is True
+    assert (tmp_path / "renders" / "audio" / "source" / "voice.wav").exists()
+    assert (tmp_path / "renders" / "audio" / "audio_manifest.json").exists()
 
 
 def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
@@ -244,10 +272,15 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     mp4_path.write_bytes(b"mp4")
     srt_path.write_text("1\n00:00:00,000 --> 00:00:01,000\n테스트\n", encoding="utf-8")
     vtt_path.write_text("WEBVTT\n\n00:00.000 --> 00:01.000\n테스트\n", encoding="utf-8")
+    voice_path = _write_silent_wav(tmp_path / "voice.wav", 1)
     write_json(preview_dir / "mp4_status.json", {"status": "mp4_ready", "mp4_path": str(mp4_path)})
     write_json(
         subtitle_dir / "subtitle_manifest.json",
         {"status": "subtitles_ready", "srt_path": str(srt_path), "vtt_path": str(vtt_path)},
+    )
+    build_audio_asset_manifest(
+        tmp_path,
+        {"voice_path": str(voice_path), "voice_source_note": "직접 녹음", "target_duration_sec": 1},
     )
 
     manifest = build_final_media_package(tmp_path)
@@ -256,6 +289,7 @@ def test_final_media_package_copies_mp4_and_sidecar_subtitles(tmp_path) -> None:
     assert (package_dir / "media" / "preview.mp4").exists()
     assert (package_dir / "media" / "subtitles.srt").exists()
     assert (package_dir / "media" / "subtitles.vtt").exists()
+    assert (package_dir / "media" / "audio" / "audio_manifest.json").exists()
     assert manifest["subtitle_mode"] == "sidecar"
 
 
@@ -275,6 +309,7 @@ def test_final_upload_checklist_blocks_without_mp4(tmp_path) -> None:
     assert checklist["status"] == "blocked_before_upload"
     assert checklist["manual_upload_allowed"] is False
     assert "mp4_present" in checklist["missing"]
+    assert "audio_ready" in checklist["missing"]
     assert "final_media_ready" in checklist["missing"]
     assert "render_export_ready" in checklist["missing"]
     assert (package_dir / "final_upload_checklist.json").exists()
@@ -294,6 +329,18 @@ def test_project_dashboard_reports_subtitle_gate(tmp_path) -> None:
     summary = summarize_project_gate(tmp_path)
     assert summary["blocking_gate"] == "subtitles"
     assert "SRT/VTT" in summary["next_step"]
+
+
+def _write_silent_wav(path, duration_sec: int):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sample_rate = 8000
+    frame_count = sample_rate * duration_sec
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(b"\x00\x00" * frame_count)
+    return path
 
 
 def test_weekly_plan_queue_marks_promoted_slot(tmp_path, monkeypatch) -> None:

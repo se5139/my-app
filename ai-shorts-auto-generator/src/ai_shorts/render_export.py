@@ -16,10 +16,12 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
     render_dir = project_dir / "renders" / "placeholder"
     preview_dir = project_dir / "renders" / "preview"
     package_dir = project_dir / "exports" / "manual_upload_package"
+    audio_dir = project_dir / "renders" / "audio"
     render_manifest = read_json(render_dir / "render_manifest.json", {})
     preview_manifest = read_json(preview_dir / "preview_manifest.json", {})
     mp4_status = read_json(preview_dir / "mp4_status.json", {})
     subtitle_manifest = read_json(project_dir / "renders" / "subtitles" / "subtitle_manifest.json", {})
+    audio_manifest = read_json(audio_dir / "audio_manifest.json", {})
     final_media_package = read_json(package_dir / "final_media_package.json", {})
     subtitle_dir = project_dir / "renders" / "subtitles"
 
@@ -28,6 +30,7 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
     mp4_ready = (preview_dir / "preview.mp4").exists() and mp4_status.get("status") == "mp4_ready"
     timing_plan_ready = (render_dir / "timing_plan.json").exists()
     subtitles_ready = subtitle_manifest.get("status") == "subtitles_ready"
+    audio_ready = audio_manifest.get("status") == "audio_ready"
     final_media_ready = final_media_package.get("status") == "final_media_ready"
 
     blockers: list[str] = []
@@ -39,6 +42,8 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
         blockers.append("preview_required_before_upload_package")
     if decision == "ready_for_upload_package" and timing_plan_ready and not subtitles_ready:
         blockers.append("subtitles_required_before_export")
+    if decision == "ready_for_upload_package" and not audio_ready:
+        blockers.append("audio_required_before_export")
     if decision == "render_blocked":
         blockers.append("human_blocked_render")
 
@@ -59,6 +64,7 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
             "gif_ready": gif_ready,
             "mp4_ready": mp4_ready,
             "subtitles_ready": subtitles_ready,
+            "audio_ready": audio_ready,
             "final_media_ready": final_media_ready,
             "timeline_html": str(render_dir / "timeline.html"),
             "preview_gif": str(preview_dir / "preview.gif"),
@@ -66,6 +72,7 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
             "subtitle_manifest": str(project_dir / "renders" / "subtitles" / "subtitle_manifest.json"),
             "subtitle_srt": str(subtitle_dir / "subtitles.srt"),
             "subtitle_vtt": str(subtitle_dir / "subtitles.vtt"),
+            "audio_manifest": str(audio_dir / "audio_manifest.json"),
             "final_media_package": str(package_dir / "final_media_package.json"),
         },
         "source_manifests": {
@@ -73,6 +80,7 @@ def build_render_export_status(project_dir: Path, decision: str = "needs_render_
             "preview_manifest": str(preview_dir / "preview_manifest.json") if preview_manifest else "",
             "mp4_status": str(preview_dir / "mp4_status.json") if mp4_status else "",
             "subtitle_manifest": str(project_dir / "renders" / "subtitles" / "subtitle_manifest.json") if subtitle_manifest else "",
+            "audio_manifest": str(audio_dir / "audio_manifest.json") if audio_manifest else "",
             "final_media_package": str(package_dir / "final_media_package.json") if final_media_package else "",
         },
         "blockers": blockers,
@@ -89,4 +97,4 @@ def _next_step(package_status: str, mp4_ready: bool) -> str:
         return "GIF/timeline review is approved; install ffmpeg and render MP4 before final upload."
     if package_status == "blocked":
         return "Resolve the render issue before export."
-    return "Revise the render or generate missing preview assets before approval."
+    return "Revise the render, audio gate, or missing preview assets before approval."
