@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .growth_learning import add_performance_record, apply_growth_learning_to_topics, recent_performance_records
+from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
 from .project_dashboard import summarize_project_gate
 from .state import read_json, update_project_review
@@ -689,6 +689,14 @@ def _render_page(result: dict | None = None, plan: dict | None = None, error: st
           <span class="muted">저장된 기록은 다음 주간 계획 점수 개선에 사용할 수 있습니다.</span>
         </div>
       </form>
+      <form method="post" action="/growth-csv-import">
+        <label for="growth_csv">YouTube Studio CSV 붙여넣기</label>
+        <textarea id="growth_csv" name="csv_text" placeholder="Title,Views,Average percentage viewed,Impressions click-through rate,Average view duration&#10;출근 루틴,1200,64,7.2,18"></textarea>
+        <div class="actions">
+          <button class="secondary" type="submit">CSV 성과 가져오기</button>
+          <span class="muted">열 이름은 Title/Views/Retention/CTR 계열을 자동 인식합니다.</span>
+        </div>
+      </form>
       {_growth_learning_summary()}
     </section>
 
@@ -753,6 +761,10 @@ class Handler(BaseHTTPRequestHandler):
                     avg_view_duration_sec=float(params.get("avg_view_duration_sec", ["0"])[0] or 0),
                     notes=params.get("notes", [""])[0],
                 )
+                self._send(_render_page())
+                return
+            if self.path == "/growth-csv-import":
+                import_performance_csv(params.get("csv_text", [""])[0])
                 self._send(_render_page())
                 return
             if self.path == "/review":

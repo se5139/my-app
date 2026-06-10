@@ -10,7 +10,7 @@ from ai_shorts.render_placeholder import create_render_placeholders
 from ai_shorts.render_preview import create_preview_media
 from ai_shorts.render_export import build_render_export_status
 from ai_shorts.ffmpeg_renderer import ffmpeg_setup_guide, mp4_status
-from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, recent_performance_records
+from ai_shorts.growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from ai_shorts.project_dashboard import summarize_project_gate
 from ai_shorts.state import write_json
 from ai_shorts.upload_checklist import build_final_upload_checklist
@@ -211,3 +211,18 @@ def test_growth_learning_boosts_matching_weekly_topics(tmp_path, monkeypatch) ->
     plan = create_weekly_plan(insights, target_count=2)
     assert plan.slots[0].topic == "출근 루틴 정리"
     assert "growth learning boost" in plan.slots[0].reason
+
+
+def test_growth_learning_imports_csv_rows(tmp_path, monkeypatch) -> None:
+    from ai_shorts import growth_learning
+
+    monkeypatch.setattr(growth_learning, "PERFORMANCE_RECORDS_PATH", tmp_path / "performance_records.json")
+    result = import_performance_csv(
+        "Title,Views,Average percentage viewed,Impressions click-through rate,Average view duration,Notes\n"
+        "CSV Topic,\"1,500\",66.5,7.4,21,good hook\n"
+    )
+    assert result["imported_count"] == 1
+    records = recent_performance_records()
+    assert records[0]["title"] == "CSV Topic"
+    assert records[0]["views"] == 1500
+    assert records[0]["growth_score"] > 0

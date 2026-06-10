@@ -336,6 +336,23 @@ Next recommended work:
 
 - Add a CSV import path for YouTube Studio exports so performance rows can be added in bulk.
 
+## 2026-06-10 YouTube Studio CSV Import Step
+
+Added bulk CSV import for growth learning:
+
+- `import_performance_csv(...)` accepts pasted CSV text and maps common YouTube Studio style columns.
+- The growth learning section now has a CSV paste form.
+- Imported rows are stored as normal performance records and immediately become available for weekly score boosts.
+
+Verification target:
+
+- Compile growth learning, web, and tests.
+- End-to-end paste CSV data, verify records are stored, then create a weekly plan and confirm the imported topic can boost ranking.
+
+Next recommended work:
+
+- Add CSV import result feedback on the page so the user can see imported/skipped row counts.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:

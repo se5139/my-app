@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from io import StringIO
 from typing import Any
 
 from .paths import GROWTH_DIR, ensure_data_dirs
@@ -42,6 +44,34 @@ def add_performance_record(
     }
     write_json(PERFORMANCE_RECORDS_PATH, payload)
     return record
+
+
+def import_performance_csv(csv_text: str) -> dict[str, Any]:
+    reader = csv.DictReader(StringIO(csv_text.strip()))
+    imported: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for row_no, row in enumerate(reader, start=2):
+        title = _pick(row, "title", "video title", "content", "콘텐츠 제목", "제목")
+        if not title:
+            skipped.append({"row": row_no, "reason": "missing_title"})
+            continue
+        imported.append(
+            add_performance_record(
+                title=title,
+                project_id=_pick(row, "project_id", "project id", "프로젝트 ID"),
+                views=_to_int(_pick(row, "views", "조회수", "view count")),
+                retention_pct=_to_float(_pick(row, "retention_pct", "average percentage viewed", "평균 유지율 %", "유지율")),
+                ctr_pct=_to_float(_pick(row, "ctr_pct", "impressions click-through rate", "CTR %", "클릭률")),
+                avg_view_duration_sec=_to_float(_pick(row, "avg_view_duration_sec", "average view duration", "평균 시청 시간 초")),
+                notes=_pick(row, "notes", "메모"),
+            )
+        )
+    return {
+        "imported_count": len(imported),
+        "skipped_count": len(skipped),
+        "skipped": skipped,
+        "records": imported,
+    }
 
 
 def recent_performance_records(limit: int = 5) -> list[dict[str, Any]]:
@@ -102,3 +132,30 @@ def _matching_records(topic: str, records: list[dict[str, Any]]) -> list[dict[st
 def _tokens(text: str) -> set[str]:
     normalized = "".join(ch.lower() if ch.isalnum() else " " for ch in str(text))
     return {token for token in normalized.split() if len(token) >= 2}
+
+
+def _pick(row: dict[str, str], *names: str) -> str:
+    normalized = {_normalize_key(key): value for key, value in row.items()}
+    for name in names:
+        value = normalized.get(_normalize_key(name), "")
+        if value:
+            return str(value).strip()
+    return ""
+
+
+def _normalize_key(value: str) -> str:
+    return "".join(ch.lower() for ch in str(value) if ch.isalnum())
+
+
+def _to_int(value: str) -> int:
+    try:
+        return int(float(str(value).replace(",", "").replace("%", "").strip() or 0))
+    except ValueError:
+        return 0
+
+
+def _to_float(value: str) -> float:
+    try:
+        return float(str(value).replace(",", "").replace("%", "").strip() or 0)
+    except ValueError:
+        return 0.0
