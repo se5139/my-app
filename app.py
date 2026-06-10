@@ -2799,6 +2799,45 @@ def latest_kakao_policy_link_report() -> dict[str, object]:
     return {}
 
 
+def kakao_policy_readiness_check(report: dict[str, object] | None = None) -> dict[str, object]:
+    report = report if isinstance(report, dict) else latest_kakao_policy_link_report()
+    if not isinstance(report, dict) or not report:
+        return {
+            "name": "Kakao 공식 링크",
+            "status": "warn",
+            "points": 4,
+            "message": "Kakao 공식 링크 점검 기록이 아직 없습니다.",
+            "recommended_action": "제출 전 Kakao 링크 점검 화면에서 최신 공식 링크 접근성을 확인하세요.",
+        }
+    status = str(report.get("status", "unknown"))
+    fail_count = int(report.get("fail_count", 0) or 0)
+    warn_count = int(report.get("warn_count", 0) or 0)
+    created_at = str(report.get("created_at", ""))
+    if status == "ok" and fail_count == 0 and warn_count == 0:
+        return {
+            "name": "Kakao 공식 링크",
+            "status": "pass",
+            "points": 0,
+            "message": f"최근 공식 링크 점검이 통과했습니다. ({created_at})",
+            "recommended_action": "제출 직전에 한 번 더 최신 링크 상태를 확인하세요.",
+        }
+    if status == "fail" or fail_count:
+        return {
+            "name": "Kakao 공식 링크",
+            "status": "fail",
+            "points": 18,
+            "message": f"Kakao 공식 링크 점검 실패가 {fail_count}개 있습니다.",
+            "recommended_action": "공식 가이드/약관 링크가 바뀌었는지 확인하고 정책 판단 근거를 최신 링크로 교체하세요.",
+        }
+    return {
+        "name": "Kakao 공식 링크",
+        "status": "warn",
+        "points": min(10, warn_count * 2 or 6),
+        "message": f"Kakao 공식 링크 점검 주의가 {warn_count}개 있습니다.",
+        "recommended_action": "주의 링크를 열어 최신 정책 페이지가 맞는지 사람 검토로 확인하세요.",
+    }
+
+
 def kakao_policy_check_page(message: str = "") -> str:
     report = latest_kakao_policy_link_report()
     checks = report.get("checks", []) if isinstance(report, dict) else []
@@ -5040,6 +5079,11 @@ def result_detail_page(name: str, message: str = "") -> str:
     )
     top_risks = readiness.get("top_risks", []) if isinstance(readiness, dict) else []
     readiness_checks = readiness.get("checks", []) if isinstance(readiness, dict) else []
+    if not isinstance(readiness_checks, list):
+        readiness_checks = []
+    kakao_policy_report = latest_kakao_policy_link_report()
+    kakao_policy_check = kakao_policy_readiness_check(kakao_policy_report)
+    readiness_checks = [*readiness_checks, kakao_policy_check]
     checks_html = html_list(
         [
             f"{check.get('name', 'check')}: {check.get('status', '')} / {check.get('message', '')}"
@@ -5243,7 +5287,6 @@ def result_detail_page(name: str, message: str = "") -> str:
         [str(item) for item in pre_submission_files[:12]],
         "아직 제출 전 패키지에 포함된 파일 목록이 없습니다.",
     )
-    kakao_policy_report = latest_kakao_policy_link_report()
     kakao_policy_status = str(kakao_policy_report.get("status", "not_checked")) if isinstance(kakao_policy_report, dict) else "not_checked"
     kakao_policy_summary = (
         f"최근 점검 {html.escape(str(kakao_policy_report.get('created_at', '')))} / "
@@ -7062,8 +7105,17 @@ def build_submission_readiness_report(
     else:
         add_check("문구 다양성", "pass", 0, "사용자 입력 문구가 충분히 포함되었습니다.", "표현 중복과 권리 위험 문구만 추가 검수하세요.")
 
+    kakao_check = kakao_policy_readiness_check()
+    add_check(
+        str(kakao_check.get("name", "Kakao 공식 링크")),
+        str(kakao_check.get("status", "warn")),
+        int(kakao_check.get("points", 0) or 0),
+        str(kakao_check.get("message", "")),
+        str(kakao_check.get("recommended_action", "")),
+    )
+
     score = max(0, min(100, score))
-    if validation_fail_count or legal_risk_level == "high":
+    if validation_fail_count or legal_risk_level == "high" or kakao_check.get("status") == "fail":
         decision = "hold"
         label = "제출 보류 권장"
     elif score >= 85:
