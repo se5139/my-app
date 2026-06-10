@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .environment_check import collect_environment_check
-from .first_run_setup import build_first_run_checklist, export_setup_guides
+from .first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
 from .growth_learning import add_performance_record, apply_growth_learning_to_topics, import_performance_csv, recent_performance_records
 from .operations_snapshot import create_operations_snapshot
 from .paths import APP_STATE_PATH, PROJECTS_DIR, ensure_data_dirs
@@ -142,9 +142,55 @@ def _first_run_checklist_html() -> str:
       <form method="post" action="/setup-guides">
         <div class="actions">
           <button class="secondary" type="submit">설정 가이드 생성</button>
+          <a href="/setup-guides">생성된 가이드 보기</a>
           <span class="muted">Markdown 가이드는 data/setup_guides 아래에 저장됩니다.</span>
         </div>
       </form>
+    </section>
+    """
+
+
+def _render_setup_guides_index() -> str:
+    guides = list_setup_guides()
+    if not guides:
+        return """
+        <section class="band">
+          <h2>설정 가이드</h2>
+          <p class="empty">아직 생성된 설정 가이드가 없습니다.</p>
+          <form method="post" action="/setup-guides">
+            <div class="actions">
+              <button type="submit">설정 가이드 생성</button>
+              <a href="/">홈으로</a>
+            </div>
+          </form>
+        </section>
+        """
+    rows = "".join(
+        "<tr>"
+        f"<td><a href=\"/setup-guide?file={_escape(item.get('filename'))}\">{_escape(item.get('title'))}</a></td>"
+        f"<td><code>{_escape(item.get('filename'))}</code></td>"
+        f"<td><code>{_escape(item.get('path'))}</code></td>"
+        "</tr>"
+        for item in guides
+    )
+    return f"""
+    <section class="band">
+      <h2>설정 가이드</h2>
+      <p class="muted">생성된 Markdown 가이드를 앱 안에서 열람합니다.</p>
+      <table><thead><tr><th>가이드</th><th>파일명</th><th>경로</th></tr></thead><tbody>{rows}</tbody></table>
+      <div class="actions"><a href="/">홈으로</a></div>
+    </section>
+    """
+
+
+def _render_setup_guide_detail(filename: str) -> str:
+    guide = read_setup_guide(filename)
+    return f"""
+    <section class="band">
+      <a class="back" href="/setup-guides">← 설정 가이드 목록</a>
+      <h2>{_escape(guide.get('title'))}</h2>
+      <p class="muted"><code>{_escape(guide.get('path'))}</code></p>
+      <pre class="narration">{_escape(guide.get('content'))}</pre>
     </section>
     """
 
@@ -858,6 +904,14 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/project":
             query = parse_qs(parsed.query)
             detail_html = _render_project_detail(query.get("id", [""])[0])
+            self._send(_render_page(detail_html=detail_html))
+            return
+        if parsed.path == "/setup-guides":
+            self._send(_render_page(detail_html=_render_setup_guides_index()))
+            return
+        if parsed.path == "/setup-guide":
+            query = parse_qs(parsed.query)
+            detail_html = _render_setup_guide_detail(query.get("file", [""])[0])
             self._send(_render_page(detail_html=detail_html))
             return
         self._send(_render_page())

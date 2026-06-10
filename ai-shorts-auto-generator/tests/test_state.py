@@ -3,7 +3,7 @@ from __future__ import annotations
 from ai_shorts.state import AppState, ShortProject, update_project_review
 from ai_shorts.compliance import AssetNote, DraftComplianceInput, GateStatus, SourceMaterial, evaluate_compliance
 from ai_shorts.environment_check import collect_environment_check
-from ai_shorts.first_run_setup import build_first_run_checklist, export_setup_guides
+from ai_shorts.first_run_setup import build_first_run_checklist, export_setup_guides, list_setup_guides, read_setup_guide
 from ai_shorts.script_lab import create_local_script_draft
 from ai_shorts.weekly_planner import TopicInsight, clamp_weekly_count, create_weekly_plan
 from ai_shorts.web_app import _render_page, _render_project_detail
@@ -86,6 +86,7 @@ def test_web_app_renders_korean_workspace() -> None:
     assert "로컬 환경 점검" in html
     assert "첫 실행 설정 체크리스트" in html
     assert "설정 가이드 생성" in html
+    assert "생성된 가이드 보기" in html
 
 
 def test_project_detail_handles_unknown_project() -> None:
@@ -311,6 +312,28 @@ def test_first_run_setup_exports_markdown_guides(tmp_path, monkeypatch) -> None:
     assert manifest["guide_count"] == 4
     assert (tmp_path / "setup_guides").exists()
     assert all(pathlib_path_exists(item["path"]) for item in manifest["guides"])
+
+
+def test_first_run_setup_lists_and_reads_guides(tmp_path, monkeypatch) -> None:
+    from ai_shorts import first_run_setup
+
+    monkeypatch.setattr(first_run_setup, "SETUP_GUIDES_DIR", tmp_path / "setup_guides")
+    export_setup_guides(
+        {
+            "checks": [
+                {"name": "Python", "status": "pass"},
+                {"name": "Git", "status": "warn"},
+                {"name": "Data folder", "status": "warn"},
+                {"name": "Projects", "status": "warn"},
+                {"name": "FFmpeg", "status": "warn"},
+            ]
+        }
+    )
+    guides = list_setup_guides()
+    assert guides
+    detail = read_setup_guide(guides[0]["filename"])
+    assert detail["filename"] == guides[0]["filename"]
+    assert "Command Or Action" in detail["content"]
 
 
 def pathlib_path_exists(path: str) -> bool:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .environment_check import collect_environment_check
@@ -83,6 +84,34 @@ def export_setup_guides(report: dict[str, Any] | None = None) -> dict[str, Any]:
     return manifest
 
 
+def list_setup_guides() -> list[dict[str, str]]:
+    if not SETUP_GUIDES_DIR.exists():
+        return []
+    guides = []
+    for path in sorted(SETUP_GUIDES_DIR.glob("*.md"), key=lambda item: item.stat().st_mtime, reverse=True):
+        guides.append(
+            {
+                "filename": path.name,
+                "title": _read_markdown_title(path),
+                "path": str(path),
+            }
+        )
+    return guides
+
+
+def read_setup_guide(filename: str) -> dict[str, str]:
+    safe_name = Path(filename).name
+    path = SETUP_GUIDES_DIR / safe_name
+    if not safe_name or path.suffix.lower() != ".md" or not path.exists():
+        raise FileNotFoundError("setup guide not found")
+    return {
+        "filename": safe_name,
+        "title": _read_markdown_title(path),
+        "path": str(path),
+        "content": path.read_text(encoding="utf-8"),
+    }
+
+
 def _action_markdown(action: dict[str, str]) -> str:
     return "\n".join(
         [
@@ -107,6 +136,13 @@ def _action_markdown(action: dict[str, str]) -> str:
             "",
         ]
     )
+
+
+def _read_markdown_title(path: Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return path.stem
 
 
 def _action_status(check: dict[str, Any] | None) -> str:

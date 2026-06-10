@@ -123,6 +123,7 @@ Saved drafts appear in the recent drafts table. Click a draft title to open its 
 - local environment check panel for Python, Git, data folder, project state, and ffmpeg readiness
 - first-run setup checklist that turns environment warnings into ordered actions
 - setup guide export that writes first-run action Markdown files under `data/setup_guides`
+- setup guide index/detail viewer for reading generated Markdown inside the web UI
 
 ## New PC Restore Guide
 

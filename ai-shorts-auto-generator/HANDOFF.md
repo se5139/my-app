@@ -455,6 +455,23 @@ Next recommended work:
 
 - Add a setup guide index/detail viewer in the web UI so generated Markdown can be opened without leaving the app.
 
+## 2026-06-10 Setup Guide Viewer Step
+
+Added in-app setup guide viewing:
+
+- `src/ai_shorts/first_run_setup.py` can now list and safely read generated Markdown guides by filename.
+- The first-run checklist panel links to `생성된 가이드 보기`.
+- The web app now has `/setup-guides` and `/setup-guide?file=...` screens for index/detail viewing.
+
+Verification target:
+
+- Compile first-run setup, web app, and tests.
+- Smoke-test guide export, index rendering, and detail rendering.
+
+Next recommended work:
+
+- Add a one-click handoff report that combines environment status, checklist, latest snapshot, and setup guide links.
+
 ## 2026-06-09 Render Review Package Step
 
 Extended placeholder rendering into a reviewable render package:
