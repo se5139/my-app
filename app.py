@@ -6869,6 +6869,16 @@ def product_mode_spec(product_mode: str) -> dict[str, object]:
     return dict(spec)
 
 
+def product_mode_for_generate_action(selected_mode: str, generate_action: str) -> str:
+    if selected_mode not in PRODUCT_MODES:
+        selected_mode = "standard_static"
+    if generate_action == "animated":
+        return "mini_animated" if selected_mode.startswith("mini_") else "standard_animated"
+    if generate_action == "static":
+        return "mini_static" if selected_mode.startswith("mini_") else "standard_static"
+    return selected_mode
+
+
 def fit_image_to_product(image: Image.Image, spec: dict[str, object]) -> Image.Image:
     canvas_px = int(spec.get("canvas_px", CANVAS_SIZE))
     if image.size == (canvas_px, canvas_px):
@@ -9030,7 +9040,7 @@ def page(
           <select id="product_mode" name="product_mode">
             {product_options}
           </select>
-          <p class="hint">정지형/움직이는/미니 모드별로 생성 개수와 ZIP 검사를 분리합니다. 실제 제출 전 최신 카카오 스튜디오 화면에서 최종 규격은 다시 확인하세요.</p>
+          <p class="hint">정지형/움직이는/미니 모드별로 생성 개수와 ZIP 검사를 분리합니다. 아래 생성 버튼으로 정지형/움직이는 모드를 바로 선택할 수 있습니다.</p>
           <label for="sketch_image">내 러프 스케치 업로드</label>
           <input id="sketch_image" name="sketch_image" type="file" accept="image/png,image/jpeg,image/webp">
           <p class="hint">원형 얼굴, 몸통, 팔다리 정도의 대략적인 스케치도 가능합니다. 흰 배경은 자동으로 최대한 제거해서 캐릭터 바탕으로 사용합니다.</p>
@@ -9069,7 +9079,9 @@ def page(
           <textarea id="human_origin_note" name="human_origin_note" placeholder="예: 종이에 러프 스케치 후 직접 선화/채색, Procreate 타임랩스 보관, 레이어 원본 보관"></textarea>
           <button type="submit" formaction="/research">자료만 수집/분석하기</button>
           <button type="submit" formaction="/learn">반복 학습 실행하기</button>
-          <button class="secondary-button" type="submit" formaction="/build">PNG/GIF/ZIP 생성하기</button>
+          <button class="secondary-button" type="submit" formaction="/build" name="generate_action" value="static">정지형 이모티콘 생성하기</button>
+          <button type="submit" formaction="/build" name="generate_action" value="animated">움직이는 이모티콘 생성하기</button>
+          <p class="hint">움직이는 버튼은 일반 선택 시 PNG 21개 + WebP/GIF 움직임 3개, 미니 선택 시 PNG 30개 + WebP/GIF 움직임 5개로 생성합니다.</p>
         </div>
         <div class="rules">
           <div class="rule">일반 정지형: PNG 32개</div>
@@ -9435,6 +9447,10 @@ class Handler(BaseHTTPRequestHandler):
                 research_result = run_learning_cycle(research_urls, research_notes, auto_collect, rounds, research_keywords)
                 self.respond(200, page(research_result=research_result))
                 return
+            selected_product_mode = product_mode_for_generate_action(
+                form_value(form, "product_mode", "standard_static"),
+                form_value(form, "generate_action", ""),
+            )
             request = BuildRequest(
                 character_name=form_value(form, "character_name", "몽실이"),
                 concept=form_value(form, "concept", "따뜻하고 말랑한 응원 캐릭터"),
@@ -9447,9 +9463,7 @@ class Handler(BaseHTTPRequestHandler):
                 workflow_mode=form_value(form, "workflow_mode", "prototype_only")
                 if form_value(form, "workflow_mode", "prototype_only") in WORKFLOW_MODES
                 else "prototype_only",
-                product_mode=form_value(form, "product_mode", "standard_static")
-                if form_value(form, "product_mode", "standard_static") in PRODUCT_MODES
-                else "standard_static",
+                product_mode=selected_product_mode,
                 human_origin_note=form_value(form, "human_origin_note", ""),
                 sketch_image=sketch_image,
                 sketch_filename=sketch_filename,
