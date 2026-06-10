@@ -3836,7 +3836,7 @@ def results_page(query: str = "", stage_filter: str = "all", message: str = "") 
   <section class="panel">
     <h1>최근 결과물</h1>
     <p>최근 생성한 결과 폴더의 진행 상태와 갤러리, ZIP, 리포트를 바로 확인합니다.</p>
-    <p><a class="nav" href="/">제작 화면</a><a class="nav" href="/memory">진화 메모리</a><a class="nav" href="/status">실행 상태</a><a class="nav" href="/release-check">배포 점검</a></p>
+    <p><a class="nav" href="/">제작 화면</a><a class="nav" href="/bulk-reports">일괄 리포트</a><a class="nav" href="/memory">진화 메모리</a><a class="nav" href="/status">실행 상태</a><a class="nav" href="/release-check">배포 점검</a></p>
     <div class="filter-bar">
       <form class="filter-form" method="get" action="/results">
         <input type="hidden" name="stage" value="{html.escape(stage_filter)}">
@@ -4103,6 +4103,104 @@ def write_bulk_action_report(
     write_json_file(json_path, report)
     html_path.write_text(html_report, encoding="utf-8")
     return report
+
+
+def load_bulk_action_reports(limit: int = 50) -> list[dict[str, object]]:
+    report_dir = OUTPUT_ROOT / "_bulk_actions"
+    if not report_dir.exists():
+        return []
+    reports: list[dict[str, object]] = []
+    for json_path in sorted(report_dir.glob("*_bulk_action_report.json"), key=lambda path: path.stat().st_mtime, reverse=True):
+        payload = read_json_file(json_path, {})
+        if not isinstance(payload, dict):
+            continue
+        html_path = Path(str(payload.get("html", "")))
+        if not html_path.exists():
+            html_path = json_path.with_suffix(".html")
+        counts = payload.get("counts", {})
+        if not isinstance(counts, dict):
+            counts = {}
+        reports.append(
+            {
+                "created_at": payload.get("created_at", json_path.stem),
+                "action_label": payload.get("action_label", payload.get("action", "")),
+                "stage_filter": payload.get("stage_filter", ""),
+                "query": payload.get("query", ""),
+                "counts": counts,
+                "json": json_path,
+                "html": html_path if html_path.exists() else None,
+                "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(json_path.stat().st_mtime)),
+            }
+        )
+        if len(reports) >= limit:
+            break
+    return reports
+
+
+def bulk_reports_page() -> str:
+    reports = load_bulk_action_reports()
+    rows = ""
+    for report in reports:
+        counts = report.get("counts", {})
+        if not isinstance(counts, dict):
+            counts = {}
+        json_path = Path(str(report.get("json", "")))
+        html_path_raw = report.get("html")
+        html_path = Path(str(html_path_raw)) if html_path_raw else None
+        json_href = "/" + str(json_path).replace("\\", "/") if json_path.exists() else ""
+        html_href = "/" + str(html_path).replace("\\", "/") if html_path and html_path.exists() else ""
+        links = "".join(
+            [
+                f"<a href='{html.escape(html_href)}'>HTML 열기</a>" if html_href else "",
+                f"<a href='{html.escape(json_href)}'>JSON 열기</a>" if json_href else "",
+            ]
+        )
+        rows += f"""
+        <tr>
+          <td><strong>{html.escape(str(report.get("action_label", "")))}</strong><br><small>{html.escape(str(report.get("created_at", "")))}</small></td>
+          <td>{html.escape(str(report.get("stage_filter", "")))}<br><small>{html.escape(str(report.get("query", "")))}</small></td>
+          <td>생성 {html.escape(str(counts.get("created", 0)))} / 건너뜀 {html.escape(str(counts.get("skipped", 0)))} / 막힘 {html.escape(str(counts.get("blocked", 0)))} / 누락 {html.escape(str(counts.get("missing", 0)))}</td>
+          <td>{html.escape(str(report.get("mtime", "")))}</td>
+          <td>{links}</td>
+        </tr>
+        """
+    if not rows:
+        rows = "<tr><td colspan='5'>아직 저장된 일괄 작업 리포트가 없습니다.</td></tr>"
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk Reports</title>
+  <style>
+    body {{ margin:0; color:#2d2424; font-family:"Malgun Gothic", sans-serif; background:linear-gradient(135deg,#fffaf0,#eef8ef); }}
+    main {{ width:min(1080px, calc(100% - 32px)); margin:0 auto; padding:42px 0; }}
+    .panel {{ border:2px solid #ead8bc; border-radius:28px; background:rgba(255,255,255,.9); padding:24px; box-shadow:0 18px 50px rgba(96,69,45,.11); margin-bottom:18px; }}
+    h1 {{ margin:0 0 10px; font-size:clamp(32px,5vw,54px); }}
+    p, td, th, small {{ line-height:1.6; color:#6f625f; }}
+    table {{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:18px; }}
+    th, td {{ text-align:left; padding:12px; border-bottom:1px solid #ead8bc; vertical-align:top; }}
+    th {{ color:#2d2424; background:#fff3d8; }}
+    a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
+    a.nav {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; }}
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>일괄 작업 리포트</h1>
+    <p>최근 일괄 작업의 생성, 건너뜀, 막힘, 누락 기록을 확인합니다.</p>
+    <p><a class="nav" href="/results">최근 결과물</a><a class="nav" href="/">제작 화면</a><a class="nav" href="/status">실행 상태</a></p>
+  </section>
+  <section class="panel">
+    <table>
+      <thead><tr><th>작업</th><th>필터/검색</th><th>결과</th><th>저장 시각</th><th>파일</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>"""
 
 
 def result_detail_page(name: str, message: str = "") -> str:
@@ -7901,6 +7999,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/results":
             params = parse_qs(parsed.query)
             self.respond(200, results_page(params.get("q", [""])[0], params.get("stage", ["all"])[0]))
+            return
+        if parsed.path == "/bulk-reports":
+            self.respond(200, bulk_reports_page())
             return
         if parsed.path == "/result":
             params = parse_qs(parsed.query)
