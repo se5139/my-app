@@ -3636,23 +3636,37 @@ def results_page() -> str:
     regen_count = sum(1 for row in rows if any(label == "재생성" and enabled for label, enabled in row.get("stage_labels", [])))
     row_html = ""
     for row in rows:
-        links = []
-        for label, key in [
-            ("상세", "detail"),
-            ("갤러리", "gallery"),
-            ("원본 ZIP", "zip"),
-            ("수정판 ZIP", "revised_zip"),
-            ("증빙 ZIP", "evidence_zip"),
-            ("최종 ZIP", "final_zip"),
-            ("제출전 ZIP", "pre_submission_zip"),
-            ("리포트", "build_report"),
-        ]:
+        def row_link(label: str, key: str) -> str:
             value = str(row.get(key, ""))
             if key == "detail":
                 value = f"/result?name={quote(str(row.get('name', '')))}"
             if value:
                 href = value if value.startswith("/") else "/" + value.replace("\\", "/")
-                links.append(f"<a href='{html.escape(href)}'>{label}</a>")
+                return f"<a href='{html.escape(href)}'>{html.escape(label)}</a>"
+            return ""
+
+        def link_group(title: str, items: list[tuple[str, str]]) -> str:
+            links = "".join(row_link(label, key) for label, key in items)
+            if not links:
+                return ""
+            return f"<div class='link-group'><strong>{html.escape(title)}</strong><span>{links}</span></div>"
+
+        grouped_links = "".join(
+            [
+                link_group("보기", [("상세", "detail"), ("갤러리", "gallery")]),
+                link_group(
+                    "ZIP",
+                    [
+                        ("원본", "zip"),
+                        ("수정판", "revised_zip"),
+                        ("증빙", "evidence_zip"),
+                        ("최종", "final_zip"),
+                        ("제출전", "pre_submission_zip"),
+                    ],
+                ),
+                link_group("리포트", [("빌드", "build_report")]),
+            ]
+        )
         stage_badges = "".join(
             f"<span class='stage {'done' if enabled else 'todo'}'>{html.escape(label)}</span>"
             for label, enabled in row.get("stage_labels", [])
@@ -3687,7 +3701,7 @@ def results_page() -> str:
           <td>{html.escape(str(row.get("readiness_score", "")))} / {html.escape(str(row.get("readiness_label", "")))}</td>
           <td>{html.escape(str(row.get("phrase_quality_status", "")))} / {html.escape(str(row.get("phrase_quality_score", "")))}</td>
           <td>{next_action_html}<br><small>{html.escape(str(row.get("next_action_reason", "")))}</small></td>
-          <td>{" ".join(links)}</td>
+          <td>{grouped_links}</td>
         </tr>
         """
     if not row_html:
@@ -3716,6 +3730,9 @@ def results_page() -> str:
     .stage {{ display:inline-block; border-radius:999px; padding:3px 7px; font-size:11px; font-weight:900; border:1px solid transparent; }}
     .stage.done {{ background:#dff8eb; color:#245d46; border-color:#83d7b6; }}
     .stage.todo {{ background:#f0ece5; color:#8a7b70; border-color:#d8ccbc; }}
+    .link-group {{ margin-bottom:7px; }}
+    .link-group strong {{ display:block; margin-bottom:2px; color:#2d2424; font-size:12px; }}
+    .link-group span {{ display:flex; flex-wrap:wrap; gap:3px; }}
     a {{ display:inline-block; margin:2px 4px 2px 0; color:#2d2424; font-weight:900; text-decoration:none; background:#e9fff4; border:1px solid #9be2c7; border-radius:999px; padding:6px 10px; }}
     a.next-action {{ background:#7fd8be; border-color:#54bea0; color:#1e3830; box-shadow:0 6px 14px rgba(58,132,105,.14); }}
     a.nav {{ background:#7fd8be; border-color:#7fd8be; }}
